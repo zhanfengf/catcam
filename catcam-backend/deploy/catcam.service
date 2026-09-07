@@ -1,0 +1,18 @@
+[Unit]
+Description=CatCam Feeder API (FastAPI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=catcam
+WorkingDirectory=/opt/catcam-backend
+EnvironmentFile=/opt/catcam-backend/.env
+# Single worker on purpose: the anti-spam limiter and the feed lock are
+# in-memory, and the shared cooldown assumes one process.
+ExecStart=/opt/catcam-backend/catvenv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080 --workers 1
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

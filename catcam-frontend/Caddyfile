@@ -1,0 +1,20 @@
+# catcam CT (114) — serve the SvelteKit build + proxy API to the FastAPI backend.
+# Install Caddy in the CT, put the built `build/` folder at /opt/catcam-frontend,
+# then point Cloudflare Tunnel route cat.kelvinp.work -> 192.168.99.147:80
+
+:80 {
+	encode gzip
+
+	# API endpoints -> uvicorn on 127.0.0.1:8080
+	@api path /status /feed /health
+	handle @api {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	# Everything else -> static SvelteKit build (SPA fallback to index.html)
+	handle {
+		root * /opt/catcam-frontend
+		try_files {path} /index.html
+		file_server
+	}
+}

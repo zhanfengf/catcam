@@ -1,0 +1,36 @@
+:root {
+  --bg: #16110d;
+  --bg-soft: #211913;
+  --card: #2a201899;
+  --card-solid: #241b14;
+  --line: #3a2c20;
+  --text: #f3e9df;
+  --text-dim: #b09b88;
+  --accent: #ff8a3d;
+  --accent-strong: #ff7a1f;
+  --ok: #6fcf7b;
+  --warn: #f2c14e;
+  --err: #ff6b6b;
+  --radius: 18px;
+  --shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  font-family: system-ui, -apple-system, "PingFang HK", "Noto Sans HK",
+    "Microsoft JhengHei", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, #2a1d13 0%, var(--bg) 55%) fixed;
+  color: var(--text);
+  min-height: 100%;
+}
+
+a {
+  color: var(--accent);
+}
