@@ -1,0 +1,19 @@
+# 機密：一定唔好入 git
+.env
+
+# Python 虛擬環境同快取
+.venv/
+__pycache__/
+*.py[cod]
+
+# SQLite 資料庫（執行時先生成）
+*.db
+*.db-wal
+*.db-shm
+
+# 打包檔
+*.tar.gz
+*.tgz
+
+# 系統雜檔
+.DS_Store
