@@ -372,14 +372,16 @@
   }
   @media (min-width: 1100px) {
     main {
-      max-width: 1400px;
+      max-width: 1300px;
     }
   }
   @media (min-width: 1600px) {
     main {
       /* camera's native resolution is 1728x1080 — capping here avoids
-         upscaling the video past its real pixel density on bigger screens */
-      max-width: 1680px;
+         upscaling the video past its real pixel density on bigger screens.
+         Kept below that cap so the hint line still fits under the video
+         without scrolling on common desktop viewport heights. */
+      max-width: 1550px;
     }
   }
 
