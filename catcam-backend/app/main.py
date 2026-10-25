@@ -145,7 +145,7 @@ async def admin_feed(request: Request):
             )
 
         fed_at = now()
-        db.record_feed(fed_at, f"admin:{ip}", s.feed_amount)
+        db.record_feed(fed_at, f"admin:{ip}", s.feed_amount, source="admin")
 
     new_status = build_status(db.get_last_fed_at())
     return {"ok": True, "message": "強制餵咗喇！🔓🐱", **new_status}

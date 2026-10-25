@@ -98,8 +98,6 @@
   let toastTimer;
   let pollTimer;
   let tickTimer;
-  let clockTimer;
-  let clockStr = '';
 
   let secretTapCount = 0;
   let secretTapTimer;
@@ -149,12 +147,6 @@
     if (h > 0) return tr.durH(h, m);
     if (m > 0) return tr.durM(m, String(s).padStart(2, '0'));
     return tr.durS(s);
-  }
-
-  function updateClock() {
-    const d = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    clockStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   }
 
   function onLogoClick() {
@@ -248,15 +240,12 @@
       if (localSecs > 0) localSecs -= 1;
       else if (status && !status.can_feed) refresh();
     }, 1000);
-    updateClock();
-    clockTimer = setInterval(updateClock, 1000);
     initCamera();
   });
 
   onDestroy(() => {
     clearInterval(pollTimer);
     clearInterval(tickTimer);
-    clearInterval(clockTimer);
     clearTimeout(toastTimer);
     clearTimeout(secretTapTimer);
     videoRtcEl?.disconnectedCallback?.();
@@ -291,7 +280,6 @@
 
   <section class="stage">
     <video-rtc class="stage-cam" bind:this={videoRtcEl}></video-rtc>
-    <div class="stage-time">{clockStr}</div>
     <button class="stage-refresh" on:click={refreshCamera} aria-label={t.refreshLabel}>↻</button>
     <div class="stage-watermark">cat.kelvinp.work</div>
     <button
@@ -479,30 +467,17 @@
     height: 100%;
     object-fit: cover;
   }
-  .stage-time {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    font-size: 13px;
-    font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    font-variant-numeric: tabular-nums;
-    color: #fff;
-    background: rgba(0, 0, 0, 0.45);
-    padding: 4px 8px;
-    border-radius: 6px;
-    pointer-events: none;
-  }
   .stage-refresh {
     position: absolute;
     top: 10px;
     right: 10px;
-    width: 32px;
-    height: 32px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     border: none;
     background: rgba(0, 0, 0, 0.45);
     color: #fff;
-    font-size: 16px;
+    font-size: 22px;
     line-height: 1;
     cursor: pointer;
     display: flex;
@@ -532,8 +507,8 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: rgba(255, 255, 255, 0.75);
-    background: rgba(0, 0, 0, 0.5);
+    color: rgba(255, 255, 255, 0.85);
+    background: linear-gradient(180deg, rgba(56, 212, 160, 0.5) 0%, rgba(6, 201, 136, 0.5) 100%);
     backdrop-filter: blur(4px);
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 999px;

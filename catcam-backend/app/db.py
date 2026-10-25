@@ -41,14 +41,17 @@ def get_last_fed_at() -> datetime | None:
     return datetime.fromisoformat(row[0])
 
 
-def record_feed(fed_at: datetime, ip: str | None, amount: int) -> None:
+def record_feed(fed_at: datetime, ip: str | None, amount: int, source: str = "public") -> None:
     with _lock:
         conn = _db()
-        conn.execute(
-            "INSERT INTO state (key, value) VALUES ('last_fed_at', ?) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (fed_at.isoformat(),),
-        )
+        if source == "public":
+            # admin (secret-channel) feeds must not push out the public
+            # cooldown — only public /feed calls move this timestamp
+            conn.execute(
+                "INSERT INTO state (key, value) VALUES ('last_fed_at', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (fed_at.isoformat(),),
+            )
         conn.execute(
             "INSERT INTO feed_log (fed_at, ip, amount) VALUES (?, ?, ?)",
             (fed_at.isoformat(), ip, amount),
