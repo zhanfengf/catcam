@@ -6,6 +6,12 @@ export async function getStatus() {
   return r.json();
 }
 
+export async function getRecordings() {
+  const r = await fetch(`${API_BASE}/recordings`, { cache: 'no-store' });
+  if (!r.ok) throw new Error(`recordings ${r.status}`);
+  return r.json();
+}
+
 export async function feed() {
   const r = await fetch(`${API_BASE}/feed`, { method: 'POST' });
   let data = {};

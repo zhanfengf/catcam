@@ -39,6 +39,12 @@ class Settings(BaseSettings):
 
     db_path: str = "./catcam.db"
 
+    recordings_dir: str = "./recordings"
+    recording_seconds: int = 60
+    recording_retention_days: int = 7
+
+    highlights_dir: str = "./highlights"
+
     @property
     def open_t(self) -> time:
         return _parse_hhmm(self.open_time)

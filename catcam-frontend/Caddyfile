@@ -10,9 +10,17 @@
 	}
 
 	# API endpoints -> uvicorn on 127.0.0.1:8080
-	@api path /status /feed /health /admin/feed /admin/history
+	@api path /status /feed /health /admin/feed /admin/history /recordings
 	handle @api {
 		reverse_proxy 127.0.0.1:8080
+	}
+
+	# Feeding clips (60s MP4s, public) -> static files the backend's recorder
+	# writes directly to disk. /recordings (above) is the JSON list; this is
+	# the actual video bytes.
+	handle_path /clips/* {
+		root * /opt/catcam-backend/recordings
+		file_server
 	}
 
 	# Live camera -> go2rtc on 127.0.0.1:1984, which pulls the PetKit cam's

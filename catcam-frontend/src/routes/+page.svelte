@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import '../app.css';
-  import { getStatus, feed, adminFeed, adminHistory } from '$lib/api.js';
+  import { getStatus, feed, adminFeed, adminHistory, getRecordings } from '$lib/api.js';
   import { VideoRTC } from '$lib/video-rtc.js';
 
   const ADMIN_TOKEN_KEY = 'catcam_admin_token';
@@ -62,7 +62,15 @@
       infoFeedTitle: '🍚 餵我',
       infoFeedText: '撳「餵貓」掣就會自動餵我食一份乾糧。但係唔好餵太多啊：每 120 分鐘先可以餵一次，每日 07:00 - 23:59（香港時間）開放，夜晚我要瞓覺㗎～',
       infoPhotosTitle: '📷 影過嘅相',
-      infoHighlightTitle: '📺 今集精華'
+      infoHighlightTitle: '📺 今集精華',
+      recordingsRowTitle: '餵食錄影',
+      recordingsRowSub: '睇返每次餵 Roll Roll 嘅 60 秒短片',
+      recordingsTitle: '餵食錄影',
+      recordingsSub: '最近 7 日嘅 60 秒短片',
+      recordingsLoading: '載入緊…',
+      recordingsEmpty: '暫時冇錄影',
+      recordingsError: '攞唔到錄影',
+      recordingsColTime: '時間'
     },
     en: {
       title: 'Roll Roll Live',
@@ -104,7 +112,15 @@
       infoFeedTitle: '🍚 Feed Me',
       infoFeedText: "Press the \"Feed Cat\" button and I'll get one portion of kibble. But don't overfeed me: only once every 120 minutes, open 07:00 - 23:59 (HK time) daily — I need my sleep at night~",
       infoPhotosTitle: '📷 Photos',
-      infoHighlightTitle: "📺 This Episode"
+      infoHighlightTitle: "📺 This Episode",
+      recordingsRowTitle: 'Feeding Clips',
+      recordingsRowSub: "Watch back each time Roll Roll's been fed — 60s clips",
+      recordingsTitle: 'Feeding Clips',
+      recordingsSub: '60-second clips from the last 7 days',
+      recordingsLoading: 'Loading…',
+      recordingsEmpty: 'No clips yet',
+      recordingsError: "Couldn't load clips",
+      recordingsColTime: 'Time'
     }
   };
 
@@ -140,6 +156,11 @@
   let tickTimer;
   let showInfoModal = false;
   let lightboxSrc = null;
+  let showRecordingsModal = false;
+  let recordings = null;
+  let recordingsLoading = false;
+  let recordingsError = false;
+  let playingClip = null;
 
   let secretTapCount = 0;
   let secretTapTimer;
@@ -211,6 +232,44 @@
 
   function closeInfoModal() {
     showInfoModal = false;
+  }
+
+  function openRecordingsModal() {
+    showRecordingsModal = true;
+    loadRecordings();
+  }
+
+  function closeRecordingsModal() {
+    showRecordingsModal = false;
+  }
+
+  async function loadRecordings() {
+    recordingsLoading = true;
+    recordingsError = false;
+    try {
+      const data = await getRecordings();
+      recordings = data.recordings || [];
+    } catch (e) {
+      recordingsError = true;
+    }
+    recordingsLoading = false;
+  }
+
+  function formatRecordingTime(iso) {
+    const d = new Date(iso);
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Hong_Kong',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      })
+        .formatToParts(d)
+        .map((p) => [p.type, p.value])
+    );
+    return `${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
   }
 
   function closeAdminModal() {
@@ -466,7 +525,12 @@
           <p class="info-subtitle">{t.infoSubtitle}</p>
         </div>
         <a class="info-ig" href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer">
-          📷 {INSTAGRAM_HANDLE}
+          <svg class="info-ig-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+            <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+          </svg>
+          {INSTAGRAM_HANDLE}
         </a>
       </div>
 
@@ -475,6 +539,17 @@
       <div class="info-feed-box">
         <div class="info-section-title">{t.infoFeedTitle}</div>
         <p class="info-feed-text">{t.infoFeedText}</p>
+      </div>
+
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <div class="info-row" role="button" tabindex="0" on:click={openRecordingsModal}>
+        <span class="info-row-icon">📹</span>
+        <div class="info-row-text">
+          <div class="info-row-title">{t.recordingsRowTitle}</div>
+          <div class="info-row-sub">{t.recordingsRowSub}</div>
+        </div>
+        <span class="info-row-chevron">›</span>
       </div>
 
       <div class="info-section-title">{t.infoPhotosTitle}</div>
@@ -501,6 +576,65 @@
   <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div class="lightbox" role="presentation" on:click={() => (lightboxSrc = null)}>
     <img src={lightboxSrc} alt={ROLL_ROLL_NAME} />
+  </div>
+{/if}
+
+{#if showRecordingsModal}
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="modal-backdrop" role="presentation" on:click={closeRecordingsModal}>
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="info-modal" role="presentation" on:click|stopPropagation>
+      <button class="modal-close" on:click={closeRecordingsModal}>✕</button>
+      <div class="info-head">
+        <span class="info-avatar">📹</span>
+        <div class="info-head-text">
+          <h2>{t.recordingsTitle}</h2>
+          <p class="info-subtitle">{t.recordingsSub}</p>
+        </div>
+      </div>
+
+      {#if recordingsLoading}
+        <p class="history-state">{t.recordingsLoading}</p>
+      {:else if recordingsError}
+        <p class="history-state">{t.recordingsError}</p>
+      {:else if recordings && recordings.length === 0}
+        <p class="history-state">{t.recordingsEmpty}</p>
+      {:else if recordings}
+        <div class="recordings-table-wrap">
+          <table class="recordings-table">
+            <thead>
+              <tr>
+                <th class="recordings-col-play"></th>
+                <th>{t.recordingsColTime}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each recordings as r}
+                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                <!-- svelte-ignore a11y-no-static-element-interactions -->
+                <tr on:click={() => (playingClip = r.filename)}>
+                  <td class="recordings-col-play">▶</td>
+                  <td>{formatRecordingTime(r.recorded_at)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </div>
+  </div>
+{/if}
+
+{#if playingClip}
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="lightbox" role="presentation" on:click={() => (playingClip = null)}>
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <video src={`/clips/${playingClip}`} controls autoplay playsinline on:click|stopPropagation>
+      <track kind="captions" />
+    </video>
   </div>
 {/if}
 
@@ -944,13 +1078,13 @@
   }
 
   .info-modal {
-    /* Lattice Design: surface-soft (feature-section band) bg, rounded.xl, spacing.xxl padding */
+    /* ex-product-selector (Lattice Design): canvas bg, rounded.xl, spacing.xxl padding */
     position: relative;
     width: 100%;
     max-width: 660px;
     max-height: 85vh;
     overflow-y: auto;
-    background: var(--bg-soft);
+    background: var(--bg);
     border: 1px solid var(--line);
     border-radius: 24px;
     padding: 24px;
@@ -982,16 +1116,27 @@
   .info-ig {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     padding: 6px 12px;
     border-radius: 999px;
-    background: var(--bg);
+    background: var(--bg-soft);
     border: 1px solid var(--line);
     color: var(--text);
     font-size: 12px;
     font-weight: 600;
     text-decoration: none;
     white-space: nowrap;
+    transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+  }
+  .info-ig:hover {
+    color: var(--accent-strong);
+    border-color: var(--accent-strong);
+    background: rgba(6, 201, 136, 0.1);
+  }
+  .info-ig-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
   }
   .info-bio {
     margin: 0 0 16px;
@@ -1056,5 +1201,87 @@
     font-weight: 700;
     text-decoration: none;
     text-align: center;
+  }
+  .info-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    margin-bottom: 16px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--bg);
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+  }
+  .info-row:hover {
+    border-color: var(--accent-strong);
+    background: rgba(6, 201, 136, 0.1);
+  }
+  .info-row-icon {
+    font-size: 22px;
+  }
+  .info-row-text {
+    flex: 1;
+  }
+  .info-row-title {
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .info-row-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .info-row-chevron {
+    font-size: 20px;
+    color: var(--text-dim);
+  }
+  /* ex-data-table-cell (Lattice Design): canvas header, mono-caps eyebrow
+     header type, body-sm cells, spacing.sm/lg padding, hairline row border */
+  .recordings-table-wrap {
+    max-height: 320px;
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .recordings-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .recordings-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-soft);
+    text-align: left;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .recordings-table tbody td {
+    font-size: 15px;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .recordings-table tbody tr {
+    cursor: pointer;
+  }
+  .recordings-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .recordings-table tbody tr:hover td {
+    background: var(--bg-soft);
+  }
+  .recordings-col-play {
+    width: 36px;
+    color: var(--accent-strong);
+  }
+  .lightbox video {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 8px;
   }
 </style>
