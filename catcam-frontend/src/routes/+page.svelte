@@ -15,7 +15,7 @@
       feedBtnReady: '🍚 餵貓',
       fedToday: '今日餵咗',
       times: '次',
-      hintLine1: (min, g) => `每 ${min} 分鐘可以餵一次（${g}g）`,
+      hintLine1: (min, g) => `每 ${min} 分鐘可以餵一次（${g}g），`,
       hintLine2: (close) => `夜晚 ${close} 之後 Roll Roll 要瞓覺喇 🌙`,
       hintLine3: (open, close) => `每日 ${open} - ${close} 開放`,
       connErr: '連唔到伺服器，遲啲再試',
@@ -44,7 +44,7 @@
       feedBtnReady: '🍚 Feed Cat',
       fedToday: 'Fed today',
       times: 'times',
-      hintLine1: (min, g) => `Feed once every ${min} min (${g}g)`,
+      hintLine1: (min, g) => `Feed once every ${min} min (${g}g),`,
       hintLine2: (close) => `Roll Roll sleeps after ${close} 🌙`,
       hintLine3: (open, close) => `Available ${open} - ${close} HK time`,
       connErr: "Can't connect, try again later",
@@ -639,7 +639,7 @@
     font-size: 14px;
     font-weight: 700;
     color: #fff;
-    background: linear-gradient(135deg, var(--indigo) 0%, #463ab0 100%);
+    background: var(--gradient-teal-orange);
     border: none;
     border-radius: 12px;
     cursor: pointer;
@@ -700,7 +700,7 @@
     align-items: center;
     justify-content: center;
     font-size: 24px;
-    background: linear-gradient(135deg, var(--indigo) 0%, #463ab0 100%);
+    background: var(--gradient-teal-orange);
     margin-bottom: 6px;
   }
   .modal h2 {
@@ -731,7 +731,7 @@
     font-size: 15px;
     font-weight: 700;
     color: #fff;
-    background: linear-gradient(135deg, var(--indigo) 0%, #463ab0 100%);
+    background: var(--gradient-teal-orange);
     cursor: pointer;
   }
 </style>

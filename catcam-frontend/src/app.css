@@ -11,13 +11,13 @@
   --accent-strong: #06c988;
   --mint: #cdface;
   --pill-green: #366625;
-  --indigo: #624ee5;
   --ok: #366625;
   --ok-tint: #ccfacd;
   --warn: #8a5a00;
   --warn-tint: #fbeed2;
   --err: #a83a2e;
   --err-tint: #fce3dc;
+  --gradient-teal-orange: linear-gradient(90deg, #4193a6, #d46c33);
   --radius: 20px;
   --shadow: 0 10px 40px rgba(0, 31, 31, 0.12);
   font-family: 'Inter', system-ui, -apple-system, "PingFang HK", "Noto Sans HK",
