@@ -1,7 +1,25 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import '../app.css';
-  import { getStatus, feed, STREAM_URL } from '$lib/api.js';
+  import { getStatus, feed, adminFeed } from '$lib/api.js';
+  import { VideoRTC } from '$lib/video-rtc.js';
+
+  const ADMIN_TOKEN_KEY = 'catcam_admin_token';
+
+  let videoRtcEl;
+
+  class CatCamVideo extends VideoRTC {
+    constructor() {
+      super();
+      // Must be set before oninit() ever runs (i.e. before the element
+      // upgrades), since oninit() only reads this once to decide whether to
+      // register the visibilitychange listener at all — setting it later as
+      // a property has no effect, the listener is already attached. Without
+      // this, iOS backgrounding the tab (screenshot, lock, app switch) trips
+      // the listener and the component closes its own WebSocket 5s later.
+      this.visibilityCheck = false;
+    }
+  }
 
   let status = null;
   let loading = true;
@@ -11,6 +29,13 @@
   let toastTimer;
   let pollTimer;
   let tickTimer;
+
+  let secretTapCount = 0;
+  let secretTapTimer;
+  let showAdminModal = false;
+  let adminPassword = '';
+  let adminToken = null;
+  let adminFeeding = false;
 
   async function refresh() {
     try {
@@ -53,6 +78,53 @@
     return `${s} 秒後`;
   }
 
+  function onLogoClick() {
+    secretTapCount += 1;
+    clearTimeout(secretTapTimer);
+    secretTapTimer = setTimeout(() => (secretTapCount = 0), 1500);
+    if (secretTapCount >= 5) {
+      secretTapCount = 0;
+      adminPassword = '';
+      showAdminModal = true;
+    }
+  }
+
+  function closeAdminModal() {
+    showAdminModal = false;
+    adminPassword = '';
+  }
+
+  function unlockAdmin() {
+    const token = adminPassword.trim();
+    if (!token) return;
+    adminToken = token;
+    localStorage.setItem(ADMIN_TOKEN_KEY, token);
+    closeAdminModal();
+    showToast('ok', '已解鎖秘密通道 🔓');
+  }
+
+  function lockAdmin() {
+    adminToken = null;
+    localStorage.removeItem(ADMIN_TOKEN_KEY);
+    showToast('ok', '已鎖返');
+  }
+
+  async function onAdminFeed() {
+    if (adminFeeding || !adminToken) return;
+    adminFeeding = true;
+    const { httpOk, data } = await adminFeed(adminToken);
+    adminFeeding = false;
+    if (httpOk && data.ok) {
+      showToast('ok', data.message || '強制餵咗喇！🔓🐱');
+    } else {
+      showToast('err', data.message || '密碼唔啱或者已過期');
+      if (data.reason === 'unauthorized') {
+        lockAdmin();
+      }
+    }
+    await refresh();
+  }
+
   $: canFeed = status?.can_feed;
   $: reason = status?.reason;
   $: btnLabel = feeding
@@ -63,19 +135,46 @@
         ? '😴 休息時間'
         : '⏳ 未到下次';
 
+  function initCamera() {
+    if (!videoRtcEl) return;
+    if (!customElements.get('video-rtc')) {
+      customElements.define('video-rtc', CatCamVideo);
+    }
+    // webrtc/mjpeg dropped: webrtc media can't cross the Cloudflare Tunnel
+    // (HTTP-only), and go2rtc's HLS here is a fixed 2-segment window that
+    // can't absorb tunnel latency. mse (WebSocket) is what actually works.
+    videoRtcEl.mode = 'mse,hls';
+    // iOS Safari's ManagedMediaSource stays suspended (black frame, no error)
+    // unless the video element has autoplay+muted — go2rtc's component doesn't
+    // set these itself. Apple's own MMS reference code sets both explicitly.
+    if (videoRtcEl.video) {
+      videoRtcEl.video.autoplay = true;
+      videoRtcEl.video.muted = true;
+    }
+    // petkit_h264, not petkit: go2rtc's raw WHEP pull declares a codec that
+    // doesn't match the real bitstream (SDP says Baseline L3.1, actual is
+    // High L5.1) — desktop ignores the mismatch, iOS Safari's MSE doesn't.
+    // petkit_h264 is a clean ffmpeg re-encode, self-consistent, iOS-safe.
+    videoRtcEl.src = '/camera/ws?src=petkit_h264';
+  }
+
   onMount(() => {
+    adminToken = localStorage.getItem(ADMIN_TOKEN_KEY);
     refresh();
     pollTimer = setInterval(refresh, 15000);
     tickTimer = setInterval(() => {
       if (localSecs > 0) localSecs -= 1;
       else if (status && !status.can_feed) refresh();
     }, 1000);
+    initCamera();
   });
 
   onDestroy(() => {
     clearInterval(pollTimer);
     clearInterval(tickTimer);
     clearTimeout(toastTimer);
+    clearTimeout(secretTapTimer);
+    videoRtcEl?.disconnectedCallback?.();
   });
 </script>
 
@@ -86,7 +185,9 @@
 <main>
   <header>
     <div class="brand">
-      <span class="logo">🐱</span>
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <span class="logo" on:click={onLogoClick}>🐱</span>
       <div>
         <h1>貓貓直播</h1>
         <p class="tag">睇住佢，順手餵餐飯</p>
@@ -100,15 +201,7 @@
   </header>
 
   <section class="stage">
-    {#if STREAM_URL}
-      <video src={STREAM_URL} autoplay muted playsinline controls></video>
-    {:else}
-      <div class="stage-placeholder">
-        <span class="big">🎥</span>
-        <p>直播畫面準備緊</p>
-        <small>裝好 RTSP cam + go2rtc 後就會喺呢度出現</small>
-      </div>
-    {/if}
+    <video-rtc class="stage-cam" bind:this={videoRtcEl}></video-rtc>
   </section>
 
   <section class="statusbar">
@@ -140,17 +233,47 @@
       {btnLabel}
     </button>
     <p class="hint">
-      每 {status?.cooldown_minutes ?? 120} 分鐘可以餵一次，每次一份（{status?.amount ?? 10}）。
+      每 {status?.cooldown_minutes ?? 120} 分鐘可以餵一次（{status?.amount ?? 10}g）<br />
       夜晚 {status?.window?.close ?? '23:59'} 之後貓貓要瞓覺喇 🌙
     </p>
   </section>
 
+  {#if adminToken}
+    <section class="admin-panel">
+      <button class="admin-btn" disabled={adminFeeding} on:click={onAdminFeed}>
+        {adminFeeding ? '強制餵緊…' : '🔓 強制餵貓（繞過規則）'}
+      </button>
+      <button class="admin-lock" on:click={lockAdmin}>🔒 鎖返</button>
+    </section>
+  {/if}
+
   {#if toast}
     <div class="toast {toast.type}">{toast.text}</div>
   {/if}
-
-  <footer>由 🐾 Home Assistant 驅動</footer>
 </main>
+
+{#if showAdminModal}
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="modal-backdrop" role="presentation" on:click={closeAdminModal}>
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="modal" role="presentation" on:click|stopPropagation>
+      <button class="modal-close" on:click={closeAdminModal}>✕</button>
+      <div class="modal-icon">🔒</div>
+      <h2>秘密通道</h2>
+      <p class="modal-sub">輸入密碼解鎖管理工具</p>
+      <input
+        type="password"
+        class="modal-input"
+        placeholder="輸入密碼"
+        bind:value={adminPassword}
+        on:keydown={(e) => e.key === 'Enter' && unlockAdmin()}
+      />
+      <button class="modal-unlock" on:click={unlockAdmin}>解鎖</button>
+    </div>
+  </div>
+{/if}
 
 <style>
   main {
@@ -210,36 +333,16 @@
     overflow: hidden;
     box-shadow: var(--shadow);
   }
-  .stage video {
+  .stage-cam {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .stage-cam :global(video) {
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
-  .stage-placeholder {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    color: var(--text-dim);
-    text-align: center;
-    padding: 12px;
-  }
-  .stage-placeholder .big {
-    font-size: 48px;
-    opacity: 0.7;
-  }
-  .stage-placeholder p {
-    margin: 4px 0 0;
-    font-size: 15px;
-  }
-  .stage-placeholder small {
-    font-size: 12px;
-    opacity: 0.7;
-  }
-
   .statusbar {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -343,11 +446,112 @@
     }
   }
 
-  footer {
-    text-align: center;
-    font-size: 12px;
-    color: var(--text-dim);
+  .admin-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    margin-top: -4px;
+  }
+  .admin-btn {
+    width: 100%;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(135deg, #3a6b8a 0%, #c9772e 100%);
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  .admin-btn:disabled {
     opacity: 0.6;
-    margin-top: 8px;
+    cursor: not-allowed;
+  }
+  .admin-lock {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 4px;
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 100;
+  }
+  .modal {
+    position: relative;
+    width: 100%;
+    max-width: 340px;
+    background: var(--card-solid);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 32px 24px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+    box-shadow: var(--shadow);
+  }
+  .modal-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .modal-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    background: linear-gradient(135deg, #3a6b8a 0%, #c9772e 100%);
+    margin-bottom: 6px;
+  }
+  .modal h2 {
+    margin: 0;
+    font-size: 18px;
+  }
+  .modal-sub {
+    margin: 0 0 14px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .modal-input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--bg, #15110c);
+    color: inherit;
+    font-size: 14px;
+    margin-bottom: 14px;
+    text-align: center;
+  }
+  .modal-unlock {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 999px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(135deg, #3a6b8a 0%, #c9772e 100%);
+    cursor: pointer;
   }
 </style>

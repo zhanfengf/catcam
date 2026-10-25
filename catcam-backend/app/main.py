@@ -1,4 +1,7 @@
 import asyncio
+import hashlib
+import hmac
+import time as time_module
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -38,6 +41,24 @@ def client_ip(request: Request) -> str:
         request.headers.get(header)
         or (request.client.host if request.client else "unknown")
     )
+
+
+def verify_admin_signature(timestamp: str, signature: str) -> bool:
+    s = get_settings()
+    if not s.admin_token or not timestamp or not signature:
+        return False
+    try:
+        ts = int(timestamp)
+    except ValueError:
+        return False
+    if abs(time_module.time() - ts) > s.admin_sig_window_seconds:
+        return False
+    expected = hmac.new(
+        s.admin_token.encode(),
+        f"POST:/admin/feed:{timestamp}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature)
 
 
 @app.get("/status")
@@ -89,6 +110,45 @@ async def feed(request: Request):
 
     new_status = build_status(db.get_last_fed_at())
     return {"ok": True, "message": "餵咗喇！🐱", **new_status}
+
+
+@app.post("/admin/feed")
+async def admin_feed(request: Request):
+    ip = client_ip(request)
+
+    if not check_ip(ip):
+        return JSONResponse(
+            status_code=429,
+            content={"ok": False, "reason": "too_many_requests",
+                     "message": "撳得太密啦，唞一唞先"},
+        )
+
+    timestamp = request.headers.get("x-admin-timestamp", "")
+    signature = request.headers.get("x-admin-signature", "")
+    if not verify_admin_signature(timestamp, signature):
+        return JSONResponse(
+            status_code=403,
+            content={"ok": False, "reason": "unauthorized",
+                     "message": "密碼唔啱或者已過期"},
+        )
+
+    async with _feed_lock:
+        s = get_settings()
+        try:
+            await ha.dispense(s.feed_amount)
+        except ha.HAError as exc:
+            return JSONResponse(
+                status_code=502,
+                content={"ok": False, "reason": "ha_error",
+                         "message": "餵食機而家連唔到，遲啲再試",
+                         "detail": str(exc)},
+            )
+
+        fed_at = now()
+        db.record_feed(fed_at, f"admin:{ip}", s.feed_amount)
+
+    new_status = build_status(db.get_last_fed_at())
+    return {"ok": True, "message": "強制餵咗喇！🔓🐱", **new_status}
 
 
 @app.get("/health")

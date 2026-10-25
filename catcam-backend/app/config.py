@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     ip_window_seconds: int = 60
 
 
+    admin_token: str = ""
+    admin_sig_window_seconds: int = 60
+
+
     client_ip_header: str = "cf-connecting-ip"
     cors_origins: str = "*"
 

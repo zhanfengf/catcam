@@ -4,17 +4,40 @@
 
 :80 {
 	encode gzip
+	log {
+		output stdout
+		format console
+	}
 
 	# API endpoints -> uvicorn on 127.0.0.1:8080
-	@api path /status /feed /health
+	@api path /status /feed /health /admin/feed
 	handle @api {
 		reverse_proxy 127.0.0.1:8080
 	}
 
+	# Live camera -> go2rtc on 127.0.0.1:1984, which pulls the PetKit cam's
+	# WHEP/WebRTC feed from HA and re-serves it over WebSocket+MSE
+	# (/camera/ws?src=petkit_h264) — go2rtc's own HLS output is unusable
+	# here (fixed 2-segment window, can't absorb tunnel latency). /camera/*
+	# maps 1:1 onto go2rtc's /api/*. See the my-homelab skill's catcam
+	# section for the full why.
+	handle_path /camera/* {
+		rewrite * /api{path}
+		reverse_proxy 127.0.0.1:1984
+	}
+
 	# Everything else -> static SvelteKit build (SPA fallback to index.html)
 	handle {
-		root * /opt/catcam-frontend
+		root * /opt/catcam-frontend/build
 		try_files {path} /index.html
 		file_server
+	}
+}
+
+# Internal only: injects the HA long-lived token so go2rtc (which can't send
+# auth headers itself) can pull the PetKit camera's WHEP stream from HA.
+http://127.0.0.1:8099 {
+	reverse_proxy http://192.168.99.183:8123 {
+		header_up Authorization "{$HA_BEARER}"
 	}
 }
