@@ -3,21 +3,27 @@ from datetime import datetime, timedelta, timezone
 import httpx
 
 from .config import get_settings
+from .scheduling import tz
+
+# PetKit's daily dispense counter. Tried image.zhi_ma_guan_jia_last_feed_event
+# (its state *is* an event timestamp) first, but that entity lags several
+# minutes to hours behind — it waits on a snapshot image upload from the
+# device. This counter updates within seconds of a real dispense (confirmed:
+# ticked up ~6s after a manual feed), because it's a plain number with no
+# image attached. It resets to 0 at local midnight, which conveniently also
+# means every value-increase in today's history is exactly one feed event —
+# we use the HA state-change's own timestamp (last_changed) for the time.
+_FEED_COUNT_ENTITY = "sensor.zhi_ma_guan_jia_times_dispensed"
 
 
 class HAError(Exception):
     """Raised when the Home Assistant call fails."""
 
 
-# PetKit's own per-dispense-event timestamp, independent of how the feed was
-# triggered (this site, the PetKit app, the device's own button, or a
-# scheduled auto-feed) — the closest thing to ground truth we have.
-_FEED_EVENT_ENTITY = "image.zhi_ma_guan_jia_last_feed_event"
-
-
 async def get_feed_history(hours: int = 72, chunk_hours: int = 6) -> list[str]:
     """Return PetKit's own feed-event timestamps (HK-local, naive ISO
-    strings) from HA's history API, newest first, deduplicated.
+    strings) derived from the times-dispensed counter's history, newest
+    first.
 
     HA's /api/history/period caps each response at a handful of rows
     (observed: 5) counted from the *start* of the requested window, not
@@ -31,8 +37,7 @@ async def get_feed_history(hours: int = 72, chunk_hours: int = 6) -> list[str]:
         raise HAError("HA_TOKEN is not configured")
 
     headers = {"Authorization": f"Bearer {s.ha_token}"}
-    seen: set[str] = set()
-    events: list[str] = []
+    raw: set[tuple[str, str]] = set()
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         chunk_end = datetime.now(timezone.utc)
@@ -45,7 +50,7 @@ async def get_feed_history(hours: int = 72, chunk_hours: int = 6) -> list[str]:
                     url,
                     headers=headers,
                     params={
-                        "filter_entity_id": _FEED_EVENT_ENTITY,
+                        "filter_entity_id": _FEED_COUNT_ENTITY,
                         "end_time": chunk_end.isoformat(),
                     },
                 )
@@ -59,13 +64,28 @@ async def get_feed_history(hours: int = 72, chunk_hours: int = 6) -> list[str]:
             if data:
                 for entry in data[0]:
                     state = entry.get("state")
-                    if not state or state in ("unknown", "unavailable") or state in seen:
+                    changed = entry.get("last_changed")
+                    if state is None or changed is None:
                         continue
-                    seen.add(state)
-                    events.append(state)
+                    raw.add((changed, state))
 
             chunk_end = chunk_start
             elapsed += chunk_hours
+
+    # walk chronologically, keep only genuine increases — this naturally
+    # skips the daily reset-to-0 and the carried-over baseline row at the
+    # start of each chunk
+    events: list[str] = []
+    prev_val: int | None = None
+    for changed, state in sorted(raw):
+        try:
+            val = int(state)
+        except ValueError:
+            continue
+        if prev_val is not None and val > prev_val:
+            dt = datetime.fromisoformat(changed).astimezone(tz())
+            events.append(dt.strftime("%Y-%m-%dT%H:%M:%S"))
+        prev_val = val
 
     return sorted(events, reverse=True)
 

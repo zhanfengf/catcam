@@ -37,10 +37,11 @@
       durM: (m, s) => `${m} 分 ${s} 秒`,
       durS: (s) => `${s} 秒`,
       historyTitle: '今日餵食紀錄（PetKit）',
-      historyNote: '裝置本身偵測到嘅每次出糧，包括網站、App、機身按鈕、排程自動餵',
+      historyNote: '裝置本身偵測到嘅每次出糧，包括網站、App、機身按鈕、排程自動餵。PetKit 雲端同步有延遲，啱啱出糧可能要等幾分鐘先顯示',
       historyLoading: '載入緊…',
       historyEmpty: '暫時冇紀錄',
-      historyError: '攞唔到紀錄'
+      historyError: '攞唔到紀錄',
+      historyRefresh: '重新整理紀錄'
     },
     en: {
       title: 'Roll Roll Live',
@@ -71,10 +72,11 @@
       durM: (m, s) => `${m}m ${s}s`,
       durS: (s) => `${s}s`,
       historyTitle: "Today's Feed History (PetKit)",
-      historyNote: 'Every dispense the device itself detected — site, app, physical button, or scheduled auto-feed',
+      historyNote: "Every dispense the device itself detected — site, app, physical button, or scheduled auto-feed. PetKit's cloud sync lags a few minutes, so a fresh feed may not show immediately",
       historyLoading: 'Loading…',
       historyEmpty: 'No records yet',
-      historyError: "Couldn't load history"
+      historyError: "Couldn't load history",
+      historyRefresh: 'Refresh history'
     }
   };
 
@@ -237,6 +239,7 @@
       }
     }
     await refresh();
+    if (adminToken) loadHistory();
   }
 
   $: canFeed = status?.can_feed;
@@ -357,7 +360,10 @@
       </button>
 
       <div class="history">
-        <div class="history-title">{t.historyTitle}</div>
+        <div class="history-head">
+          <div class="history-title">{t.historyTitle}</div>
+          <button class="history-refresh" on:click={loadHistory} disabled={historyLoading} aria-label={t.historyRefresh}>↻</button>
+        </div>
         <p class="history-note">{t.historyNote}</p>
         {#if historyLoading}
           <p class="history-state">{t.historyLoading}</p>
@@ -703,9 +709,28 @@
     border-radius: 14px;
     padding: 14px 16px;
   }
+  .history-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
   .history-title {
     font-size: 13px;
     font-weight: 700;
+  }
+  .history-refresh {
+    border: none;
+    background: none;
+    color: var(--text-dim);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 4px;
+  }
+  .history-refresh:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
   .history-note {
     margin: 2px 0 8px;
