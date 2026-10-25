@@ -1163,8 +1163,12 @@
     display: flex;
     gap: 8px;
     overflow-x: auto;
-    padding-bottom: 4px;
-    margin-bottom: 16px;
+    /* padding on all sides so the hover glow isn't clipped by
+       overflow-x:auto (which forces overflow-y to clip too — a container
+       can't scroll one axis while leaving the other visible), including
+       for the first/last photo where there's no neighbour to absorb it */
+    padding: 20px;
+    margin: -20px -20px 0;
   }
   .info-gallery img {
     width: 110px;
@@ -1173,6 +1177,14 @@
     border-radius: 12px;
     flex-shrink: 0;
     cursor: zoom-in;
+    position: relative;
+    z-index: 0;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .info-gallery img:hover {
+    transform: scale(1.08);
+    box-shadow: 0 0 18px 4px rgba(6, 201, 136, 0.55);
+    z-index: 1;
   }
   .lightbox {
     position: fixed;
