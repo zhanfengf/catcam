@@ -25,6 +25,7 @@
     zh: {
       title: 'Roll Roll直播',
       live: '直播中',
+      liveOffline: '離線',
       feedBtnFeeding: '餵緊…',
       feedBtnReady: '🍚 餵貓',
       fedToday: '訪客餵食咗',
@@ -75,6 +76,7 @@
     en: {
       title: 'Roll Roll Live',
       live: 'LIVE',
+      liveOffline: 'Offline',
       feedBtnFeeding: 'Feeding…',
       feedBtnReady: '🍚 Feed Cat',
       fedToday: 'Fed by visitors',
@@ -154,6 +156,8 @@
   let toastTimer;
   let pollTimer;
   let tickTimer;
+  let cameraConnected = false;
+  let cameraCheckTimer;
   let showInfoModal = false;
   let lightboxSrc = null;
   let showRecordingsModal = false;
@@ -374,6 +378,10 @@
     initCamera();
   }
 
+  function checkCameraConnection() {
+    cameraConnected = videoRtcEl?.wsState === WebSocket.OPEN;
+  }
+
   onMount(() => {
     lang = localStorage.getItem(LANG_KEY) || 'zh';
     adminToken = localStorage.getItem(ADMIN_TOKEN_KEY);
@@ -385,11 +393,13 @@
       else if (status && !status.can_feed) refresh();
     }, 1000);
     initCamera();
+    cameraCheckTimer = setInterval(checkCameraConnection, 3000);
   });
 
   onDestroy(() => {
     clearInterval(pollTimer);
     clearInterval(tickTimer);
+    clearInterval(cameraCheckTimer);
     clearTimeout(toastTimer);
     clearTimeout(secretTapTimer);
     videoRtcEl?.disconnectedCallback?.();
@@ -416,9 +426,9 @@
         <button class:active={lang === 'zh'} on:click={() => setLang('zh')}>繁中</button>
         <button class:active={lang === 'en'} on:click={() => setLang('en')}>EN</button>
       </div>
-      <span class="live-badge">
+      <span class="live-badge" class:offline={!cameraConnected}>
         <span class="live-dot"></span>
-        {t.live}
+        {cameraConnected ? t.live : t.liveOffline}
       </span>
     </div>
   </header>
@@ -747,6 +757,10 @@
     border-radius: 50%;
     background: var(--err);
     animation: live-pulse 1.4s ease-in-out infinite;
+  }
+  .live-badge.offline .live-dot {
+    background: var(--text-dim);
+    animation: none;
   }
   @keyframes live-pulse {
     0%, 100% {
