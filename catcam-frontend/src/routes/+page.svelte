@@ -59,6 +59,8 @@
       infoLabel: 'Roll Roll 資料',
       infoSubtitle: '2025年8月生・香港🇭🇰',
       infoBio: '哈囉～我係Roll Roll，2025年8月喺香港出世嘅捲耳貓BB 一隻，在2026年4月見到媽媽，收編了媽媽。最鍾意瞓覺、食嘢同俾人摸頭。你而家睇緊嘅就係我屋企，鏡頭直接對住我嘅食盆，等緊你嚟探我！',
+      infoFeedTitle: '🍚 餵我',
+      infoFeedText: '撳「餵貓」掣就會自動餵我食一份乾糧。但係唔好餵太多啊：每 120 分鐘先可以餵一次，每日 07:00 - 23:59（香港時間）開放，夜晚我要瞓覺㗎～',
       infoPhotosTitle: '📷 影過嘅相',
       infoHighlightTitle: '📺 今集精華'
     },
@@ -99,6 +101,8 @@
       infoLabel: 'About Roll Roll',
       infoSubtitle: 'Born Aug 2025 · Hong Kong 🇭🇰',
       infoBio: "Hi, I'm Roll Roll — a curly-eared kitten born in Hong Kong in August 2025. In April 2026 I met my mom and decided to adopt her. I love sleeping, eating, and getting head pats. What you're watching right now is my home — the camera points straight at my food bowl, so come visit me!",
+      infoFeedTitle: '🍚 Feed Me',
+      infoFeedText: "Press the \"Feed Cat\" button and I'll get one portion of kibble. But don't overfeed me: only once every 120 minutes, open 07:00 - 23:59 (HK time) daily — I need my sleep at night~",
       infoPhotosTitle: '📷 Photos',
       infoHighlightTitle: "📺 This Episode"
     }
@@ -135,6 +139,7 @@
   let pollTimer;
   let tickTimer;
   let showInfoModal = false;
+  let lightboxSrc = null;
 
   let secretTapCount = 0;
   let secretTapTimer;
@@ -467,10 +472,17 @@
 
       <p class="info-bio">{t.infoBio}</p>
 
+      <div class="info-feed-box">
+        <div class="info-section-title">{t.infoFeedTitle}</div>
+        <p class="info-feed-text">{t.infoFeedText}</p>
+      </div>
+
       <div class="info-section-title">{t.infoPhotosTitle}</div>
       <div class="info-gallery">
         {#each PHOTOS as src}
-          <img src={src} alt={ROLL_ROLL_NAME} loading="lazy" />
+          <!-- svelte-ignore a11y-click-events-have-key-events -->
+          <!-- svelte-ignore a11y-no-static-element-interactions -->
+          <img src={src} alt={ROLL_ROLL_NAME} loading="lazy" on:click={() => (lightboxSrc = src)} />
         {/each}
       </div>
 
@@ -481,6 +493,14 @@
         </a>
       {/if}
     </div>
+  </div>
+{/if}
+
+{#if lightboxSrc}
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="lightbox" role="presentation" on:click={() => (lightboxSrc = null)}>
+    <img src={lightboxSrc} alt={ROLL_ROLL_NAME} />
   </div>
 {/if}
 
@@ -924,15 +944,16 @@
   }
 
   .info-modal {
+    /* Lattice Design: surface-soft (feature-section band) bg, rounded.xl, spacing.xxl padding */
     position: relative;
     width: 100%;
-    max-width: 480px;
+    max-width: 660px;
     max-height: 85vh;
     overflow-y: auto;
-    background: var(--card-solid);
+    background: var(--bg-soft);
     border: 1px solid var(--line);
-    border-radius: 18px;
-    padding: 24px 20px 20px;
+    border-radius: 24px;
+    padding: 24px;
     box-shadow: var(--shadow);
   }
   .info-head {
@@ -940,6 +961,7 @@
     align-items: flex-start;
     gap: 12px;
     margin-bottom: 10px;
+    padding-right: 32px;
   }
   .info-avatar {
     font-size: 32px;
@@ -963,7 +985,7 @@
     gap: 4px;
     padding: 6px 12px;
     border-radius: 999px;
-    background: var(--bg-soft);
+    background: var(--bg);
     border: 1px solid var(--line);
     color: var(--text);
     font-size: 12px;
@@ -973,6 +995,17 @@
   }
   .info-bio {
     margin: 0 0 16px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .info-feed-box {
+    margin-bottom: 16px;
+  }
+  .info-feed-box .info-section-title {
+    margin-bottom: 4px;
+  }
+  .info-feed-text {
+    margin: 0;
     font-size: 14px;
     line-height: 1.6;
   }
@@ -994,6 +1027,24 @@
     object-fit: cover;
     border-radius: 12px;
     flex-shrink: 0;
+    cursor: zoom-in;
+  }
+  .lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.92);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 200;
+    cursor: zoom-out;
+  }
+  .lightbox img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 8px;
   }
   .info-highlight {
     display: block;
