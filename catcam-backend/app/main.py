@@ -43,7 +43,7 @@ def client_ip(request: Request) -> str:
     )
 
 
-def verify_admin_signature(timestamp: str, signature: str) -> bool:
+def verify_admin_signature(method: str, path: str, timestamp: str, signature: str) -> bool:
     s = get_settings()
     if not s.admin_token or not timestamp or not signature:
         return False
@@ -55,7 +55,7 @@ def verify_admin_signature(timestamp: str, signature: str) -> bool:
         return False
     expected = hmac.new(
         s.admin_token.encode(),
-        f"POST:/admin/feed:{timestamp}".encode(),
+        f"{method}:{path}:{timestamp}".encode(),
         hashlib.sha256,
     ).hexdigest()
     return hmac.compare_digest(expected, signature)
@@ -125,7 +125,7 @@ async def admin_feed(request: Request):
 
     timestamp = request.headers.get("x-admin-timestamp", "")
     signature = request.headers.get("x-admin-signature", "")
-    if not verify_admin_signature(timestamp, signature):
+    if not verify_admin_signature("POST", "/admin/feed", timestamp, signature):
         return JSONResponse(
             status_code=403,
             content={"ok": False, "reason": "unauthorized",
@@ -149,6 +149,35 @@ async def admin_feed(request: Request):
 
     new_status = build_status(db.get_last_fed_at())
     return {"ok": True, "message": "強制餵咗喇！🔓🐱", **new_status}
+
+
+@app.get("/admin/history")
+async def admin_history(request: Request):
+    timestamp = request.headers.get("x-admin-timestamp", "")
+    signature = request.headers.get("x-admin-signature", "")
+    if not verify_admin_signature("GET", "/admin/history", timestamp, signature):
+        return JSONResponse(
+            status_code=403,
+            content={"ok": False, "reason": "unauthorized",
+                     "message": "密碼唔啱或者已過期"},
+        )
+
+    today_start = day_start(now())
+    hours = max(0.1, (now() - today_start).total_seconds() / 3600)
+    try:
+        petkit_log = await ha.get_feed_history(hours=hours)
+    except ha.HAError as exc:
+        return JSONResponse(
+            status_code=502,
+            content={"ok": False, "reason": "ha_error",
+                      "message": "攞唔到紀錄", "detail": str(exc)},
+        )
+
+    # chunked lookback can overshoot into yesterday — keep only today's HK events
+    cutoff = today_start.strftime("%Y-%m-%dT%H:%M:%S")
+    petkit_log = [t for t in petkit_log if t >= cutoff]
+
+    return {"ok": True, "petkit_log": petkit_log}
 
 
 @app.get("/health")

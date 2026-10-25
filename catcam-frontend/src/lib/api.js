@@ -17,9 +17,9 @@ export async function feed() {
   return { httpOk: r.ok, status: r.status, data };
 }
 
-async function signAdminRequest(token, path) {
+async function signAdminRequest(token, method, path) {
   const timestamp = Math.floor(Date.now() / 1000).toString();
-  const message = `POST:${path}:${timestamp}`;
+  const message = `${method}:${path}:${timestamp}`;
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(token),
@@ -35,9 +35,27 @@ async function signAdminRequest(token, path) {
 }
 
 export async function adminFeed(token) {
-  const { timestamp, signature } = await signAdminRequest(token, '/admin/feed');
+  const { timestamp, signature } = await signAdminRequest(token, 'POST', '/admin/feed');
   const r = await fetch(`${API_BASE}/admin/feed`, {
     method: 'POST',
+    headers: {
+      'X-Admin-Timestamp': timestamp,
+      'X-Admin-Signature': signature
+    }
+  });
+  let data = {};
+  try {
+    data = await r.json();
+  } catch (e) {
+
+  }
+  return { httpOk: r.ok, status: r.status, data };
+}
+
+export async function adminHistory(token) {
+  const { timestamp, signature } = await signAdminRequest(token, 'GET', '/admin/history');
+  const r = await fetch(`${API_BASE}/admin/history`, {
+    method: 'GET',
     headers: {
       'X-Admin-Timestamp': timestamp,
       'X-Admin-Signature': signature

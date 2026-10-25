@@ -7,9 +7,9 @@ go2rtc 嘅直播串流。
 
 ```
 觀眾 → cat.kelvinp.work → Caddy(:80, CT 114)
-        ├─ /                       → 靜態 SvelteKit build
-        ├─ /status /feed /admin/feed → reverse_proxy 127.0.0.1:8080（FastAPI 後端）
-        └─ /camera/*               → reverse_proxy 127.0.0.1:1984（go2rtc，rewrite 做 /api/*）
+        ├─ /                                        → 靜態 SvelteKit build
+        ├─ /status /feed /admin/feed /admin/history  → reverse_proxy 127.0.0.1:8080（FastAPI 後端）
+        └─ /camera/*                                 → reverse_proxy 127.0.0.1:1984（go2rtc，rewrite 做 /api/*）
 ```
 
 ## 直播畫面
@@ -23,12 +23,24 @@ WebSocket + MSE 經 `/camera/ws?src=petkit_h264` 重新 serve 出嚟。前端
 蓋咗 `visibilityCheck`（iOS Safari 背景分頁會提早斷線嘅 bug，詳見
 `my-homelab` skill 嘅 catcam 章節）。
 
+左上角個時間唔係前端畫嘅——係 go2rtc 嗰邊用 ffmpeg 嘅 `drawtext` filter
+直接燒錄入條串流度（設定喺 CT 114 嘅 `go2rtc.yaml`，唔喺呢個 repo
+入面）。前端呢邊淨係有個 `.stage-refresh` 掣同 `.stage-watermark`，冇
+clock 相關嘅 state。
+
 ## 秘密管理通道
 
 連續撳 logo 5 次會彈一個密碼 modal。密碼就係後端嘅 `ADMIN_TOKEN`。解鎖
-之後,前端用 Web Crypto（`crypto.subtle`）對請求做 HMAC-SHA256 簽名,
-call `POST /admin/feed` 嚟繞過冷卻時間同開放時段直接餵。Token 存喺
-`localStorage`,唔會傳明文密碼。
+之後,前端用 Web Crypto（`crypto.subtle`）對請求做 HMAC-SHA256 簽名,解鎖
+之後有兩個功能：
+- `POST /admin/feed`：繞過冷卻時間同開放時段直接餵。呢個動作**唔會**影響
+  訪客見到嘅倒數——公開冷卻時間同「訪客食咗」次數都只跟 `/feed`（訪客觸發）
+  走，故意分開。
+- `GET /admin/history`：顯示今日 PetKit 裝置本身偵測到嘅每次出糧時間
+  （唔係呢個網站自己嘅紀錄——網站觸發嘅餵食最終都會出現喺呢度，所以冇需要
+  分開顯示兩份清單）。
+
+Token 存喺 `localStorage`，唔會傳明文密碼。
 
 ## 雙語
 
@@ -67,7 +79,7 @@ ssh root@upsn150-pve "
 ```
 
 `Caddyfile`（repo 根同 `deploy/` 都有一份,內容要保持一致）已經設定好
-`/` serve 靜態 build、`/status /feed /health /admin/feed` 代理去後端、
+`/` serve 靜態 build、`/status /feed /health /admin/feed /admin/history` 代理去後端、
 `/camera/*` 代理去 go2rtc。CT 入面要裝 Caddy(見官方 apt repo 說明)同
 go2rtc,並喺 Cloudflare Tunnel 加一條 route:`cat.kelvinp.work` →
 `http://<CT IP>:80`。

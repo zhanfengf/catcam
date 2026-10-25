@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import '../app.css';
-  import { getStatus, feed, adminFeed } from '$lib/api.js';
+  import { getStatus, feed, adminFeed, adminHistory } from '$lib/api.js';
   import { VideoRTC } from '$lib/video-rtc.js';
 
   const ADMIN_TOKEN_KEY = 'catcam_admin_token';
@@ -13,7 +13,7 @@
       live: '直播中',
       feedBtnFeeding: '餵緊…',
       feedBtnReady: '🍚 餵貓',
-      fedToday: '今日餵咗',
+      fedToday: '訪客食咗',
       times: '次',
       hintLine1: (min, g) => `每 ${min} 分鐘可以餵一次（${g}g），`,
       hintLine2: (close) => `夜晚 ${close} 之後 Roll Roll 要瞓覺喇 🌙`,
@@ -35,14 +35,19 @@
       refreshLabel: '重新整理鏡頭',
       durH: (h, m) => `${h} 小時 ${m} 分鐘`,
       durM: (m, s) => `${m} 分 ${s} 秒`,
-      durS: (s) => `${s} 秒`
+      durS: (s) => `${s} 秒`,
+      historyTitle: '今日餵食紀錄（PetKit）',
+      historyNote: '裝置本身偵測到嘅每次出糧，包括網站、App、機身按鈕、排程自動餵',
+      historyLoading: '載入緊…',
+      historyEmpty: '暫時冇紀錄',
+      historyError: '攞唔到紀錄'
     },
     en: {
       title: 'Roll Roll Live',
       live: 'LIVE',
       feedBtnFeeding: 'Feeding…',
       feedBtnReady: '🍚 Feed Cat',
-      fedToday: 'Fed today',
+      fedToday: 'Fed by visitors',
       times: 'times',
       hintLine1: (min, g) => `Feed once every ${min} min (${g}g),`,
       hintLine2: (close) => `Roll Roll sleeps after ${close} 🌙`,
@@ -64,7 +69,12 @@
       refreshLabel: 'Refresh camera',
       durH: (h, m) => `${h}h ${m}m`,
       durM: (m, s) => `${m}m ${s}s`,
-      durS: (s) => `${s}s`
+      durS: (s) => `${s}s`,
+      historyTitle: "Today's Feed History (PetKit)",
+      historyNote: 'Every dispense the device itself detected — site, app, physical button, or scheduled auto-feed',
+      historyLoading: 'Loading…',
+      historyEmpty: 'No records yet',
+      historyError: "Couldn't load history"
     }
   };
 
@@ -105,6 +115,9 @@
   let adminPassword = '';
   let adminToken = null;
   let adminFeeding = false;
+  let history = null;
+  let historyLoading = false;
+  let historyError = false;
 
   async function refresh() {
     try {
@@ -172,12 +185,42 @@
     localStorage.setItem(ADMIN_TOKEN_KEY, token);
     closeAdminModal();
     showToast('ok', t.unlockedToast);
+    loadHistory();
   }
 
   function lockAdmin() {
     adminToken = null;
     localStorage.removeItem(ADMIN_TOKEN_KEY);
     showToast('ok', t.lockedToast);
+    history = null;
+  }
+
+  function formatPetkitTime(ts) {
+    // PetKit's history API returns naive HK-local timestamps (no offset);
+    // only today's events are shown, so just the time is enough
+    if (!ts) return '';
+    const d = new Date(ts + '+08:00');
+    return d.toLocaleString('zh-HK', {
+      timeZone: 'Asia/Hong_Kong',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+  }
+
+  async function loadHistory() {
+    if (!adminToken) return;
+    historyLoading = true;
+    historyError = false;
+    const { httpOk, data } = await adminHistory(adminToken);
+    historyLoading = false;
+    if (httpOk && data.ok) {
+      history = data.petkit_log || [];
+    } else {
+      historyError = true;
+      if (data.reason === 'unauthorized') lockAdmin();
+    }
   }
 
   async function onAdminFeed() {
@@ -234,6 +277,7 @@
   onMount(() => {
     lang = localStorage.getItem(LANG_KEY) || 'zh';
     adminToken = localStorage.getItem(ADMIN_TOKEN_KEY);
+    if (adminToken) loadHistory();
     refresh();
     pollTimer = setInterval(refresh, 15000);
     tickTimer = setInterval(() => {
@@ -311,6 +355,25 @@
       <button class="admin-btn" disabled={adminFeeding} on:click={onAdminFeed}>
         {adminFeeding ? t.adminFeedFeeding : t.adminFeedReady}
       </button>
+
+      <div class="history">
+        <div class="history-title">{t.historyTitle}</div>
+        <p class="history-note">{t.historyNote}</p>
+        {#if historyLoading}
+          <p class="history-state">{t.historyLoading}</p>
+        {:else if historyError}
+          <p class="history-state">{t.historyError}</p>
+        {:else if history && history.length === 0}
+          <p class="history-state">{t.historyEmpty}</p>
+        {:else if history}
+          <ul class="history-list">
+            {#each history as ts}
+              <li>{formatPetkitTime(ts)}</li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
+
       <button class="admin-lock" on:click={lockAdmin}>{t.adminLockBtn}</button>
     </section>
   {/if}
@@ -632,6 +695,43 @@
     font-size: 12px;
     cursor: pointer;
     padding: 4px;
+  }
+  .history {
+    width: 100%;
+    background: var(--card-solid);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px 16px;
+  }
+  .history-title {
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .history-note {
+    margin: 2px 0 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .history-state {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .history-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px;
+  }
+  .history-list li {
+    padding: 4px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .history-list li:last-child {
+    border-bottom: none;
   }
 
   .modal-backdrop {

@@ -15,26 +15,44 @@ service — the Home Assistant token stays here, never in the browser.
 - Open window: **07:00–23:59 (Asia/Hong_Kong)**.
 - Fixed portion: **10**.
 - Per-IP anti-spam (stops hammering; not the feeding quota).
-- `last_fed_at` persisted in **SQLite**, so restarts keep the limit.
+- `last_fed_at` persisted in **SQLite**, so restarts keep the limit. Only
+  **public** (`/feed`) calls advance this timestamp — the owner's
+  `/admin/feed` bypass never pushes out or resets the public cooldown, so
+  using the secret channel doesn't block or confuse visitors.
+- `fed_today` (shown as "訪客食咗"/"Fed by visitors") counts **public feeds
+  only** — admin-channel feeds are excluded, by design.
 
 ## Endpoints
 
-| Method | Path          | Purpose                                                |
-| ------ | ------------- | ------------------------------------------------------- |
-| GET    | `/status`     | Can we feed now? next feed time, window, fed today.      |
-| POST   | `/feed`       | Try to feed. Enforces all rules, then calls HA.          |
-| POST   | `/admin/feed` | HMAC-signed bypass (cooldown + open hours) for the owner only. |
-| GET    | `/health`     | Liveness check.                                          |
+| Method | Path             | Purpose                                                |
+| ------ | ---------------- | ------------------------------------------------------- |
+| GET    | `/status`        | Can we feed now? next feed time, window, visitor fed-today count. |
+| POST   | `/feed`          | Try to feed. Enforces all rules, then calls HA.          |
+| POST   | `/admin/feed`    | HMAC-signed bypass (cooldown + open hours) for the owner only. |
+| GET    | `/admin/history` | HMAC-signed. Today's feed events, straight from PetKit (not our own log). |
+| GET    | `/health`        | Liveness check.                                          |
 
 `POST /feed` returns `200` on success, `403` outside hours, `429` cooldown or
 spam, `502` if HA is unreachable.
 
-`POST /admin/feed` is the secret-channel endpoint the frontend calls after
-unlocking (tap the logo 5×, enter `ADMIN_TOKEN`). The request must be
-HMAC-SHA256 signed with `ADMIN_TOKEN` and include a timestamp within
+`POST /admin/feed` and `GET /admin/history` are the secret-channel endpoints
+the frontend calls after unlocking (tap the logo 5×, enter `ADMIN_TOKEN`).
+Every request must be HMAC-SHA256 signed with `ADMIN_TOKEN` over
+`{METHOD}:{PATH}:{timestamp}` and include a timestamp within
 `ADMIN_SIG_WINDOW_SECONDS` — see `verify_admin_signature()` in `app/main.py`.
-It still records the feed (counts toward `fed_today`) but skips the cooldown
-and open-hours checks. No plaintext password crosses the wire.
+No plaintext password crosses the wire. `/admin/feed` still logs the feed
+(`feed_log`) but — unlike `/feed` — skips cooldown/open-hours checks and
+does **not** touch the public `last_fed_at` or `fed_today`.
+
+`/admin/history` doesn't read our own `feed_log` at all — it queries Home
+Assistant's history API for the PetKit device's own `last_feed_event` sensor,
+which updates on *every* real dispense regardless of trigger (this site, the
+PetKit app, the physical button, or a scheduled auto-feed). That sensor's
+timestamp is the ground truth; our own log only knows about feeds triggered
+through this site. See `get_feed_history()` in `app/ha.py` — note HA's
+history endpoint caps each response at a handful of rows counted from the
+*start* of the requested window, so it's queried in small backward-walking
+chunks rather than one wide request.
 
 ## Deploy in the LXC (Debian 12, no Docker)
 
@@ -45,8 +63,8 @@ useradd -r -m -d /opt/catcam-backend catcam || true
 
 # copy this folder to /opt/catcam-backend, then:
 cd /opt/catcam-backend
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+python3 -m venv catvenv   # name matches deploy/catcam.service's ExecStart
+catvenv/bin/pip install -r requirements.txt
 
 cp .env.example .env
 #  >>> edit .env: set HA_TOKEN (and check HA_URL / entity) <<<
