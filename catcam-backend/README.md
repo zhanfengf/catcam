@@ -19,14 +19,22 @@ service — the Home Assistant token stays here, never in the browser.
 
 ## Endpoints
 
-| Method | Path      | Purpose                                             |
-| ------ | --------- | --------------------------------------------------- |
-| GET    | `/status` | Can we feed now? next feed time, window, fed today. |
-| POST   | `/feed`   | Try to feed. Enforces all rules, then calls HA.     |
-| GET    | `/health` | Liveness check.                                     |
+| Method | Path          | Purpose                                                |
+| ------ | ------------- | ------------------------------------------------------- |
+| GET    | `/status`     | Can we feed now? next feed time, window, fed today.      |
+| POST   | `/feed`       | Try to feed. Enforces all rules, then calls HA.          |
+| POST   | `/admin/feed` | HMAC-signed bypass (cooldown + open hours) for the owner only. |
+| GET    | `/health`     | Liveness check.                                          |
 
 `POST /feed` returns `200` on success, `403` outside hours, `429` cooldown or
 spam, `502` if HA is unreachable.
+
+`POST /admin/feed` is the secret-channel endpoint the frontend calls after
+unlocking (tap the logo 5×, enter `ADMIN_TOKEN`). The request must be
+HMAC-SHA256 signed with `ADMIN_TOKEN` and include a timestamp within
+`ADMIN_SIG_WINDOW_SECONDS` — see `verify_admin_signature()` in `app/main.py`.
+It still records the feed (counts toward `fed_today`) but skips the cooldown
+and open-hours checks. No plaintext password crosses the wire.
 
 ## Deploy in the LXC (Debian 12, no Docker)
 

@@ -3,14 +3,19 @@
 A public **"feed my cat"** web app. Viewers open a link, watch a live stream of
 the cat, and press a button to dispense a portion of food — subject to sensible
 rules (shared cooldown, open hours, anti-spam). The button ultimately triggers a
-real smart feeder through Home Assistant.
+real smart feeder through Home Assistant. A hidden admin channel (tap the logo
+5×) lets the owner bypass those rules with an HMAC-signed request.
 
 ```
 Viewer's browser
       │
-      ▼
+      ├────────────────────────────────────────────┐
+      ▼                                             ▼
 SvelteKit frontend  ──►  FastAPI backend  ──►  Home Assistant REST API  ──►  🍚 feeder
    (static SPA)          (rules + state)        (text.*_manual_feed)
+      │
+      ▼
+go2rtc (WebSocket + MSE)  ──►  Home Assistant WHEP  ──►  📷 PetKit camera
 ```
 
 ## Why I built it
@@ -25,7 +30,7 @@ secrets on the server side — never in the browser.
 | Folder             | What it is                                                        |
 | ------------------ | ----------------------------------------------------------------- |
 | [`catcam-backend`](./catcam-backend)   | Python + FastAPI service. Enforces feeding rules and calls Home Assistant. Keeps the HA token server-side. |
-| [`catcam-frontend`](./catcam-frontend) | SvelteKit static SPA (Cantonese UI). Live stream, status, countdown, and the feed button. |
+| [`catcam-frontend`](./catcam-frontend) | SvelteKit static SPA (繁中/EN toggle). Live stream (go2rtc, WebSocket+MSE), status, feed button, and a hidden admin channel. |
 
 Each folder has its own README with setup and deployment details.
 
@@ -42,7 +47,8 @@ Each folder has its own README with setup and deployment details.
 
 - **Backend:** Python, FastAPI, Uvicorn, httpx, SQLite
 - **Frontend:** SvelteKit (static adapter), Vite
-- **Infra:** Caddy (static serving + reverse proxy), Cloudflare Tunnel, Home Assistant
+- **Infra:** Caddy (static serving + reverse proxy), Cloudflare Tunnel, Home
+  Assistant, go2rtc (WHEP → WebSocket+MSE relay for the live camera)
 
 ## Quick start
 
@@ -69,6 +75,3 @@ provided in each folder — copy it to `.env` and fill in your own values. The
 real `.env` files are **git-ignored and never committed**; in particular the
 Home Assistant long-lived access token lives only in the backend's `.env`.
 
-## Roadmap
-
-- Embed the live RTSP camera stream (via go2rtc / HLS) in place of the current placeholder.
