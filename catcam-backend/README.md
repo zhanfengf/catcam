@@ -45,14 +45,24 @@ No plaintext password crosses the wire. `/admin/feed` still logs the feed
 does **not** touch the public `last_fed_at` or `fed_today`.
 
 `/admin/history` doesn't read our own `feed_log` at all — it queries Home
-Assistant's history API for the PetKit device's own `last_feed_event` sensor,
-which updates on *every* real dispense regardless of trigger (this site, the
-PetKit app, the physical button, or a scheduled auto-feed). That sensor's
-timestamp is the ground truth; our own log only knows about feeds triggered
-through this site. See `get_feed_history()` in `app/ha.py` — note HA's
-history endpoint caps each response at a handful of rows counted from the
-*start* of the requested window, so it's queried in small backward-walking
-chunks rather than one wide request.
+Assistant's history API for the PetKit device's `times_dispensed` counter,
+which increments on *every* real dispense regardless of trigger (this site,
+the PetKit app, the physical button, or a scheduled auto-feed), and resets to
+0 at local midnight. Each increase in its history is one feed event; the
+event's time is HA's own `last_changed` for that state change. Our own log
+only knows about feeds triggered through this site, so this is the ground
+truth. See `get_feed_history()` in `app/ha.py` — two non-obvious things
+there:
+- HA's history endpoint caps each response at a handful of rows counted from
+  the *start* of the requested window, so it's queried in small
+  backward-walking chunks rather than one wide request.
+- The PetKit integration also exposes `image.*_last_feed_event`, whose state
+  *is* a literal event timestamp — tempting to use directly, but it lags
+  minutes-to-hours behind (it waits on a snapshot image upload from the
+  device). `times_dispensed` is a plain number with no image attached and
+  updates within seconds of a real dispense — confirmed by watching it tick
+  up ~6s after a manual feed, while `last_feed_event` was still an hour+
+  stale.
 
 ## Deploy in the LXC (Debian 12, no Docker)
 
