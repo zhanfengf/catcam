@@ -13,7 +13,7 @@
       live: '直播中',
       feedBtnFeeding: '餵緊…',
       feedBtnReady: '🍚 餵貓',
-      fedToday: '訪客食咗',
+      fedToday: '訪客餵食咗',
       times: '次',
       hintLine1: (min, g) => `每 ${min} 分鐘可以餵一次（${g}g），`,
       hintLine2: (close) => `夜晚 ${close} 之後 Roll Roll 要瞓覺喇 🌙`,
