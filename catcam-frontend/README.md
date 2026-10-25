@@ -7,9 +7,10 @@ go2rtc 嘅直播串流。
 
 ```
 觀眾 → cat.kelvinp.work → Caddy(:80, CT 114)
-        ├─ /                                        → 靜態 SvelteKit build
-        ├─ /status /feed /admin/feed /admin/history  → reverse_proxy 127.0.0.1:8080（FastAPI 後端）
-        └─ /camera/*                                 → reverse_proxy 127.0.0.1:1984（go2rtc，rewrite 做 /api/*）
+        ├─ /                                                      → 靜態 SvelteKit build
+        ├─ /status /feed /admin/feed /admin/history /recordings   → reverse_proxy 127.0.0.1:8080（FastAPI 後端）
+        ├─ /clips/*                                                → 靜態檔（FastAPI 寫落去嘅 60 秒餵食片，唔經後端）
+        └─ /camera/*                                                → reverse_proxy 127.0.0.1:1984（go2rtc，rewrite 做 /api/*）
 ```
 
 ## 直播畫面
@@ -42,6 +43,22 @@ clock 相關嘅 state。
   可能有幾秒至幾分鐘延遲。
 
 Token 存喺 `localStorage`，唔會傳明文密碼。
+
+## 資料卡（ⓘ）
+
+標題旁邊個 ⓘ 掣彈一個公開嘅資料 modal:名、出生資訊、Instagram 連結(inline
+SVG 畫嘅相機圖示，`hover` 會連埋外框一齊變返 `--accent-strong` 綠色)、簡介、
+相片 gallery(5 張，`static/photos/` 入面，撳相可以放大做 lightbox，再撳一下
+返去資料卡)。相片原圖(iPhone 拍嘅)上載前要用 `magick -auto-orient -resize
+-strip` 處理過，**一定要去晒 EXIF/GPS**先至放得（公開網站，原圖會洩露屋企
+位置）。
+
+資料卡入面仲有一行「餵食錄影」，撳開會攞 `GET /recordings`（公開，唔使
+token），個清單用 Lattice `ex-data-table-cell` 樣式（canvas 底、
+surface-soft 表頭、hairline 行線），撳某一行會播返條 `/clips/<filename>.mp4`
+（lightbox 入面用 `<video controls autoplay>`，撳背景關閉）。呢個同
+「今日餵食紀錄」（`/admin/history`，收埋喺秘密通道）係兩樣嘢 —— 一個係公開
+嘅 60 秒片，一個係管理員先睇到嘅時間清單。
 
 ## 雙語
 
@@ -80,7 +97,8 @@ ssh root@upsn150-pve "
 ```
 
 `Caddyfile`（repo 根同 `deploy/` 都有一份,內容要保持一致）已經設定好
-`/` serve 靜態 build、`/status /feed /health /admin/feed /admin/history` 代理去後端、
+`/` serve 靜態 build、`/status /feed /health /admin/feed /admin/history
+/recordings` 代理去後端、`/clips/*` 直接 serve 後端寫落 CT 本機嘅餵食片、
 `/camera/*` 代理去 go2rtc。CT 入面要裝 Caddy(見官方 apt repo 說明)同
 go2rtc,並喺 Cloudflare Tunnel 加一條 route:`cat.kelvinp.work` →
 `http://<CT IP>:80`。
