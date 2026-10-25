@@ -4,3 +4,4 @@ build/
 .env
 *.tgz
 .DS_Store
+static/photos/

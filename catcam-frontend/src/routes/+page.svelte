@@ -7,6 +7,20 @@
   const ADMIN_TOKEN_KEY = 'catcam_admin_token';
   const LANG_KEY = 'catcam_lang';
 
+  const ROLL_ROLL_NAME = 'Roll Roll';
+  const INSTAGRAM_URL = 'https://www.instagram.com/familieskhm';
+  const INSTAGRAM_HANDLE = '@familieskhm';
+  // fill in once a real Roll Roll highlight video is ready — the
+  // "今集精華" section stays hidden until this is set
+  const HIGHLIGHT_VIDEO_URL = '';
+  const PHOTOS = [
+    '/photos/rollroll-1.jpg',
+    '/photos/rollroll-2.jpg',
+    '/photos/rollroll-3.jpg',
+    '/photos/rollroll-4.jpg',
+    '/photos/rollroll-5.jpg'
+  ];
+
   const translations = {
     zh: {
       title: 'Roll Roll直播',
@@ -41,7 +55,12 @@
       historyLoading: '載入緊…',
       historyEmpty: '暫時冇紀錄',
       historyError: '攞唔到紀錄',
-      historyRefresh: '重新整理紀錄'
+      historyRefresh: '重新整理紀錄',
+      infoLabel: 'Roll Roll 資料',
+      infoSubtitle: '2025年8月生・香港🇭🇰',
+      infoBio: '哈囉～我係Roll Roll，2025年8月喺香港出世嘅捲耳貓BB 一隻，在2026年4月見到媽媽，收編了媽媽。最鍾意瞓覺、食嘢同俾人摸頭。你而家睇緊嘅就係我屋企，鏡頭直接對住我嘅食盆，等緊你嚟探我！',
+      infoPhotosTitle: '📷 影過嘅相',
+      infoHighlightTitle: '📺 今集精華'
     },
     en: {
       title: 'Roll Roll Live',
@@ -76,7 +95,12 @@
       historyLoading: 'Loading…',
       historyEmpty: 'No records yet',
       historyError: "Couldn't load history",
-      historyRefresh: 'Refresh history'
+      historyRefresh: 'Refresh history',
+      infoLabel: 'About Roll Roll',
+      infoSubtitle: 'Born Aug 2025 · Hong Kong 🇭🇰',
+      infoBio: "Hi, I'm Roll Roll — a curly-eared kitten born in Hong Kong in August 2025. In April 2026 I met my mom and decided to adopt her. I love sleeping, eating, and getting head pats. What you're watching right now is my home — the camera points straight at my food bowl, so come visit me!",
+      infoPhotosTitle: '📷 Photos',
+      infoHighlightTitle: "📺 This Episode"
     }
   };
 
@@ -110,6 +134,7 @@
   let toastTimer;
   let pollTimer;
   let tickTimer;
+  let showInfoModal = false;
 
   let secretTapCount = 0;
   let secretTapTimer;
@@ -173,6 +198,14 @@
       adminPassword = '';
       showAdminModal = true;
     }
+  }
+
+  function openInfoModal() {
+    showInfoModal = true;
+  }
+
+  function closeInfoModal() {
+    showInfoModal = false;
   }
 
   function closeAdminModal() {
@@ -309,8 +342,9 @@
       <!-- svelte-ignore a11y-click-events-have-key-events -->
       <!-- svelte-ignore a11y-no-static-element-interactions -->
       <span class="logo" on:click={onLogoClick}>🐱</span>
-      <div>
+      <div class="brand-title">
         <h1>{t.title}</h1>
+        <button class="info-btn" on:click={openInfoModal} aria-label={t.infoLabel}>ⓘ</button>
       </div>
     </div>
     <div class="header-right">
@@ -412,6 +446,44 @@
   </div>
 {/if}
 
+{#if showInfoModal}
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="modal-backdrop" role="presentation" on:click={closeInfoModal}>
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="info-modal" role="presentation" on:click|stopPropagation>
+      <button class="modal-close" on:click={closeInfoModal}>✕</button>
+      <div class="info-head">
+        <span class="info-avatar">🐱</span>
+        <div class="info-head-text">
+          <h2>{ROLL_ROLL_NAME}</h2>
+          <p class="info-subtitle">{t.infoSubtitle}</p>
+        </div>
+        <a class="info-ig" href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer">
+          📷 {INSTAGRAM_HANDLE}
+        </a>
+      </div>
+
+      <p class="info-bio">{t.infoBio}</p>
+
+      <div class="info-section-title">{t.infoPhotosTitle}</div>
+      <div class="info-gallery">
+        {#each PHOTOS as src}
+          <img src={src} alt={ROLL_ROLL_NAME} loading="lazy" />
+        {/each}
+      </div>
+
+      {#if HIGHLIGHT_VIDEO_URL}
+        <div class="info-section-title">{t.infoHighlightTitle}</div>
+        <a class="info-highlight" href={HIGHLIGHT_VIDEO_URL} target="_blank" rel="noopener noreferrer">
+          ▶ {t.infoHighlightTitle}
+        </a>
+      {/if}
+    </div>
+  </div>
+{/if}
+
 <style>
   main {
     max-width: 560px;
@@ -457,10 +529,24 @@
     font-size: 26px;
     line-height: 1;
   }
+  .brand-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
   h1 {
     margin: 0;
     font-size: 16px;
     letter-spacing: 0.5px;
+  }
+  .info-btn {
+    border: none;
+    background: none;
+    color: var(--text-dim);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px;
   }
 
   .header-right {
@@ -835,5 +921,89 @@
     color: #fff;
     background: var(--gradient-teal-orange);
     cursor: pointer;
+  }
+
+  .info-modal {
+    position: relative;
+    width: 100%;
+    max-width: 480px;
+    max-height: 85vh;
+    overflow-y: auto;
+    background: var(--card-solid);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 24px 20px 20px;
+    box-shadow: var(--shadow);
+  }
+  .info-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .info-avatar {
+    font-size: 32px;
+    line-height: 1;
+  }
+  .info-head-text {
+    flex: 1;
+  }
+  .info-head-text h2 {
+    margin: 0;
+    font-size: 18px;
+  }
+  .info-subtitle {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .info-ig {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .info-bio {
+    margin: 0 0 16px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .info-section-title {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .info-gallery {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-bottom: 16px;
+  }
+  .info-gallery img {
+    width: 110px;
+    height: 110px;
+    object-fit: cover;
+    border-radius: 12px;
+    flex-shrink: 0;
+  }
+  .info-highlight {
+    display: block;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: var(--gradient-teal-orange);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    text-align: center;
   }
 </style>
