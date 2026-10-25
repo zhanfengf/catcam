@@ -179,7 +179,7 @@
 </script>
 
 <svelte:head>
-  <title>貓貓直播 · 餵貓</title>
+  <title>Roll Roll直播 · 餵貓</title>
 </svelte:head>
 
 <main>
@@ -189,7 +189,7 @@
       <!-- svelte-ignore a11y-no-static-element-interactions -->
       <span class="logo" on:click={onLogoClick}>🐱</span>
       <div>
-        <h1>貓貓直播</h1>
+        <h1>Roll Roll直播</h1>
         <p class="tag">睇住佢，順手餵餐飯</p>
       </div>
     </div>
@@ -234,7 +234,7 @@
     </button>
     <p class="hint">
       每 {status?.cooldown_minutes ?? 120} 分鐘可以餵一次（{status?.amount ?? 10}g）<br />
-      夜晚 {status?.window?.close ?? '23:59'} 之後貓貓要瞓覺喇 🌙
+      夜晚 {status?.window?.close ?? '23:59'} 之後 Roll Roll 要瞓覺喇 🌙
     </p>
   </section>
 
@@ -315,19 +315,19 @@
     font-size: 12px;
     padding: 6px 10px;
     border-radius: 999px;
-    background: #3a2c20;
+    background: var(--bg-soft);
     color: var(--text-dim);
     white-space: nowrap;
   }
   .live-badge.on {
-    background: #14361b;
-    color: var(--ok);
+    background: var(--mint);
+    color: var(--pill-green);
   }
 
   .stage {
     position: relative;
     aspect-ratio: 16 / 9;
-    background: #0d0906;
+    background: #000d0d;
     border: 1px solid var(--line);
     border-radius: var(--radius);
     overflow: hidden;
@@ -377,9 +377,9 @@
     width: 100%;
     padding: 20px;
     font-size: 22px;
-    font-weight: 800;
-    color: #3a1c05;
-    background: #4a3a2c;
+    font-weight: 700;
+    color: var(--text-dim);
+    background: var(--bg-soft);
     border: none;
     border-radius: var(--radius);
     cursor: not-allowed;
@@ -387,7 +387,7 @@
     box-shadow: var(--shadow);
   }
   .feed-btn.ready {
-    color: #3a1c05;
+    color: var(--mint);
     background: linear-gradient(180deg, var(--accent) 0%, var(--accent-strong) 100%);
     cursor: pointer;
   }
@@ -421,9 +421,9 @@
     animation: pop 0.2s ease;
   }
   .toast.ok {
-    background: #14361b;
+    background: #0f3319;
     color: var(--ok);
-    border: 1px solid #1f5a2c;
+    border: 1px solid var(--line);
   }
   .toast.warn {
     background: #3a2f12;
@@ -459,7 +459,7 @@
     font-size: 14px;
     font-weight: 700;
     color: #fff;
-    background: linear-gradient(135deg, #3a6b8a 0%, #c9772e 100%);
+    background: linear-gradient(135deg, var(--indigo) 0%, #463ab0 100%);
     border: none;
     border-radius: 12px;
     cursor: pointer;
@@ -520,7 +520,7 @@
     align-items: center;
     justify-content: center;
     font-size: 24px;
-    background: linear-gradient(135deg, #3a6b8a 0%, #c9772e 100%);
+    background: linear-gradient(135deg, var(--indigo) 0%, #463ab0 100%);
     margin-bottom: 6px;
   }
   .modal h2 {
@@ -537,7 +537,7 @@
     padding: 12px 14px;
     border-radius: 999px;
     border: 1px solid var(--line);
-    background: var(--bg, #15110c);
+    background: var(--bg, #001515);
     color: inherit;
     font-size: 14px;
     margin-bottom: 14px;
@@ -551,7 +551,7 @@
     font-size: 15px;
     font-weight: 700;
     color: #fff;
-    background: linear-gradient(135deg, #3a6b8a 0%, #c9772e 100%);
+    background: linear-gradient(135deg, var(--indigo) 0%, #463ab0 100%);
     cursor: pointer;
   }
 </style>

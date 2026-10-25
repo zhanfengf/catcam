@@ -1,19 +1,23 @@
 :root {
-  --bg: #16110d;
-  --bg-soft: #211913;
-  --card: #2a201899;
-  --card-solid: #241b14;
-  --line: #3a2c20;
-  --text: #f3e9df;
-  --text-dim: #b09b88;
-  --accent: #ff8a3d;
-  --accent-strong: #ff7a1f;
-  --ok: #6fcf7b;
+  /* Lattice Analysis Dark (200_Reference/design-systems/lattice/DESIGN-DARK.md) */
+  --bg: #001515;
+  --bg-soft: #071c1a;
+  --card: #0a232099;
+  --card-solid: #0a2320;
+  --line: #1e3532;
+  --text: #ffffff;
+  --text-dim: #9fb0b0;
+  --accent: #057a52;
+  --accent-strong: #046645;
+  --mint: #cdface;
+  --pill-green: #366625;
+  --indigo: #624ee5;
+  --ok: #cdface;
   --warn: #f2c14e;
   --err: #ff6b6b;
-  --radius: 18px;
-  --shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
-  font-family: system-ui, -apple-system, "PingFang HK", "Noto Sans HK",
+  --radius: 20px;
+  --shadow: 0 10px 40px rgba(0, 21, 21, 0.45);
+  font-family: 'Inter', system-ui, -apple-system, "PingFang HK", "Noto Sans HK",
     "Microsoft JhengHei", sans-serif;
 }
 
@@ -26,7 +30,7 @@ body {
   margin: 0;
   padding: 0;
   background:
-    radial-gradient(1200px 600px at 50% -10%, #2a1d13 0%, var(--bg) 55%) fixed;
+    radial-gradient(1200px 600px at 50% -10%, #0e3330 0%, var(--bg) 55%) fixed;
   color: var(--text);
   min-height: 100%;
 }
