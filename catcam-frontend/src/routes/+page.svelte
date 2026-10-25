@@ -10,13 +10,11 @@
   const translations = {
     zh: {
       title: 'Roll Roll直播',
-      tag: '睇住佢，順手餵餐飯',
       live: '直播中',
-      fedToday: '今日餵咗',
-      times: '次',
-      loading: '載入緊…',
       feedBtnFeeding: '餵緊…',
       feedBtnReady: '🍚 餵貓',
+      fedToday: '今日餵咗',
+      times: '次',
       hintLine1: (min, g) => `每 ${min} 分鐘可以餵一次（${g}g）`,
       hintLine2: (close) => `夜晚 ${close} 之後 Roll Roll 要瞓覺喇 🌙`,
       hintLine3: (open, close) => `每日 ${open} - ${close} 開放`,
@@ -41,13 +39,11 @@
     },
     en: {
       title: 'Roll Roll Live',
-      tag: 'Watch & feed with one tap',
       live: 'LIVE',
-      fedToday: 'Fed today',
-      times: 'times',
-      loading: 'Loading…',
       feedBtnFeeding: 'Feeding…',
       feedBtnReady: '🍚 Feed Cat',
+      fedToday: 'Fed today',
+      times: 'times',
       hintLine1: (min, g) => `Feed once every ${min} min (${g}g)`,
       hintLine2: (close) => `Roll Roll sleeps after ${close} 🌙`,
       hintLine3: (open, close) => `Available ${open} - ${close} HK time`,
@@ -96,7 +92,6 @@
   }
 
   let status = null;
-  let loading = true;
   let feeding = false;
   let localSecs = 0;
   let toast = null;
@@ -117,9 +112,7 @@
     try {
       status = await getStatus();
       localSecs = status.seconds_until_next ?? 0;
-      loading = false;
     } catch (e) {
-      loading = false;
       showToast('err', t.connErr);
     }
   }
@@ -282,7 +275,6 @@
       <span class="logo" on:click={onLogoClick}>🐱</span>
       <div>
         <h1>{t.title}</h1>
-        <p class="tag">{t.tag}</p>
       </div>
     </div>
     <div class="header-right">
@@ -312,27 +304,22 @@
     </button>
   </section>
 
-  <section class="statusbar">
-    {#if loading}
-      <p class="dim">{t.loading}</p>
-    {:else if status}
-      <div class="stat">
-        <span class="k">{t.fedToday}</span>
-        <span class="v">{status.fed_today ?? 0} {t.times}</span>
-      </div>
-    {/if}
-  </section>
-
   <section class="action">
     <p class="hint">
-      {t.hintLine1(status?.cooldown_minutes ?? 120, status?.amount ?? 10)}<br />
-      {t.hintLine2(status?.window?.close ?? '23:59')}<br />
+      {t.hintLine1(status?.cooldown_minutes ?? 120, status?.amount ?? 10)}
+      {t.hintLine2(status?.window?.close ?? '23:59')}
       {t.hintLine3(status?.window?.open ?? '07:00', status?.window?.close ?? '23:59')}
     </p>
   </section>
 
   {#if adminToken}
     <section class="admin-panel">
+      {#if status}
+        <div class="stat">
+          <span class="k">{t.fedToday}</span>
+          <span class="v">{status.fed_today ?? 0} {t.times}</span>
+        </div>
+      {/if}
       <button class="admin-btn" disabled={adminFeeding} on:click={onAdminFeed}>
         {adminFeeding ? t.adminFeedFeeding : t.adminFeedReady}
       </button>
@@ -372,10 +359,28 @@
   main {
     max-width: 560px;
     margin: 0 auto;
-    padding: 20px 16px 48px;
+    padding: 12px 16px 48px;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 12px;
+  }
+  @media (min-width: 700px) {
+    main {
+      max-width: 900px;
+      padding: 12px 24px 56px;
+    }
+  }
+  @media (min-width: 1100px) {
+    main {
+      max-width: 1400px;
+    }
+  }
+  @media (min-width: 1600px) {
+    main {
+      /* camera's native resolution is 1728x1080 — capping here avoids
+         upscaling the video past its real pixel density on bigger screens */
+      max-width: 1680px;
+    }
   }
 
   header {
@@ -390,18 +395,13 @@
     gap: 12px;
   }
   .logo {
-    font-size: 40px;
+    font-size: 26px;
     line-height: 1;
   }
   h1 {
     margin: 0;
-    font-size: 22px;
+    font-size: 16px;
     letter-spacing: 0.5px;
-  }
-  .tag {
-    margin: 2px 0 0;
-    font-size: 13px;
-    color: var(--text-dim);
   }
 
   .header-right {
@@ -554,29 +554,6 @@
     opacity: 0.7;
   }
 
-  .statusbar {
-    display: flex;
-    justify-content: center;
-  }
-  .stat {
-    background: var(--card-solid);
-    border: 1px solid var(--line);
-    border-radius: 14px;
-    padding: 12px 24px;
-    text-align: center;
-    min-width: 160px;
-  }
-  .stat .k {
-    display: block;
-    font-size: 12px;
-    color: var(--text-dim);
-    margin-bottom: 4px;
-  }
-  .stat .v {
-    font-size: 15px;
-    font-weight: 600;
-  }
-
   .action {
     display: flex;
     flex-direction: column;
@@ -636,6 +613,25 @@
     align-items: center;
     gap: 6px;
     margin-top: -4px;
+  }
+  .stat {
+    background: var(--card-solid);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px 24px;
+    text-align: center;
+    min-width: 160px;
+    margin-bottom: 4px;
+  }
+  .stat .k {
+    display: block;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .stat .v {
+    font-size: 15px;
+    font-weight: 600;
   }
   .admin-btn {
     width: 100%;
