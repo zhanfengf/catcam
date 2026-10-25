@@ -1,22 +1,25 @@
 :root {
-  /* Lattice Analysis Dark (200_Reference/design-systems/lattice/DESIGN-DARK.md) */
-  --bg: #001515;
-  --bg-soft: #071c1a;
-  --card: #0a232099;
-  --card-solid: #0a2320;
-  --line: #1e3532;
-  --text: #ffffff;
-  --text-dim: #9fb0b0;
-  --accent: #057a52;
-  --accent-strong: #046645;
+  /* Lattice Analysis (200_Reference/design-systems/lattice/DESIGN.md) */
+  --bg: #ffffff;
+  --bg-soft: #f7f6f2;
+  --card: #faf9f7cc;
+  --card-solid: #faf9f7;
+  --line: #c4cccc;
+  --text: #001f1f;
+  --text-dim: #455252;
+  --accent: #38d4a0;
+  --accent-strong: #06c988;
   --mint: #cdface;
   --pill-green: #366625;
   --indigo: #624ee5;
-  --ok: #cdface;
-  --warn: #f2c14e;
-  --err: #ff6b6b;
+  --ok: #366625;
+  --ok-tint: #ccfacd;
+  --warn: #8a5a00;
+  --warn-tint: #fbeed2;
+  --err: #a83a2e;
+  --err-tint: #fce3dc;
   --radius: 20px;
-  --shadow: 0 10px 40px rgba(0, 21, 21, 0.45);
+  --shadow: 0 10px 40px rgba(0, 31, 31, 0.12);
   font-family: 'Inter', system-ui, -apple-system, "PingFang HK", "Noto Sans HK",
     "Microsoft JhengHei", sans-serif;
 }
@@ -30,7 +33,7 @@ body {
   margin: 0;
   padding: 0;
   background:
-    radial-gradient(1200px 600px at 50% -10%, #0e3330 0%, var(--bg) 55%) fixed;
+    radial-gradient(1200px 600px at 50% -10%, #c9f4ee 0%, var(--bg) 55%) fixed;
   color: var(--text);
   min-height: 100%;
 }

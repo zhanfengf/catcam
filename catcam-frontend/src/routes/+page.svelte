@@ -327,7 +327,7 @@
   .stage {
     position: relative;
     aspect-ratio: 16 / 9;
-    background: #000d0d;
+    background: #001f1f;
     border: 1px solid var(--line);
     border-radius: var(--radius);
     overflow: hidden;
@@ -380,7 +380,7 @@
     font-weight: 700;
     color: var(--text-dim);
     background: var(--bg-soft);
-    border: none;
+    border: 1px solid var(--line);
     border-radius: var(--radius);
     cursor: not-allowed;
     transition: transform 0.08s ease, filter 0.15s ease;
@@ -389,6 +389,7 @@
   .feed-btn.ready {
     color: var(--mint);
     background: linear-gradient(180deg, var(--accent) 0%, var(--accent-strong) 100%);
+    border: none;
     cursor: pointer;
   }
   .feed-btn.ready:active {
@@ -421,19 +422,19 @@
     animation: pop 0.2s ease;
   }
   .toast.ok {
-    background: #0f3319;
+    background: var(--ok-tint);
     color: var(--ok);
     border: 1px solid var(--line);
   }
   .toast.warn {
-    background: #3a2f12;
+    background: var(--warn-tint);
     color: var(--warn);
-    border: 1px solid #6b551d;
+    border: 1px solid var(--line);
   }
   .toast.err {
-    background: #3a1616;
+    background: var(--err-tint);
     color: var(--err);
-    border: 1px solid #6b1d1d;
+    border: 1px solid var(--line);
   }
   @keyframes pop {
     from {
@@ -537,7 +538,7 @@
     padding: 12px 14px;
     border-radius: 999px;
     border: 1px solid var(--line);
-    background: var(--bg, #001515);
+    background: var(--bg, #ffffff);
     color: inherit;
     font-size: 14px;
     margin-bottom: 14px;
