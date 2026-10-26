@@ -4,6 +4,10 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.12.0 — 大聲公重開公告制 + 全站自訂 cursor(2026-10-26)
+
+- `b5cfd9a` Add a megaphone re-open button and site-wide custom cursors——語言切換掣左面加咗一粒大聲公 icon(淨係喺有公告時先顯示),撳落去會強制重新彈出公告 card,唔理 `localStorage` 記住嘅關閉狀態。同時幫成個網站換咗自訂 cursor:general cursor 係實心黑色三角箭嘴(加咗白邊,確保喺鏡頭直播深色畫面都唔會隱形);可以撳嘅元素(掣、連結)就用深藍色粗線手指(Lucide `pointer`,白色圓角方塊做底,避免透明背景喺任何地方都睇唔清)。全部用一個 `--cursor-pointer` CSS variable 集中管理——Svelte scoped style 嘅 class 選擇器優先權永遠高過單純 `button` 選擇器,所以逐個元件散落嘅 `cursor: pointer;` 改用返呢個變數,一次維護、處處生效
+
 ## v0.11.0 — 公告欄 + 歷史紀錄,補齊 README 文檔(2026-10-26)
 
 - `cd538b2` Document the announcement banner, admin_test tagging, and HA offline check——兩份 README 之前已經同 `app/main.py` 脫節——Endpoints 表完全冇列 `/admin/feed-test`、`/admin/announcement`,冇提過 `ha_online`、`feed_log` 嘅 `admin_test:` 標記、公告彈窗嘅 dismiss 邏輯。另外明文記低今次踩咗兩次嘅 Caddyfile 伏:新加任何 `/admin/*` route,CT 本機嘅 `@api path` 清單(唔淨係 repo 複本)都要同步更新,否則請求靜默跌落 SPA fallback,攞住 HTML 當 JSON 解析
