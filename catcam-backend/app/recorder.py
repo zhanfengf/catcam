@@ -4,6 +4,7 @@ from pathlib import Path
 
 import httpx
 
+from . import buffer
 from .config import get_settings
 from .scheduling import tz
 
@@ -44,12 +45,46 @@ async def _get_times_dispensed(client: httpx.AsyncClient) -> int | None:
 async def _record_clip(when: datetime) -> None:
     s = get_settings()
     final_path = recordings_dir() / (when.strftime(FILENAME_FMT) + ".mp4")
+
+    # wait for the 24/7 ring buffer to actually have footage past `when` —
+    # the pre-roll segments covering before `when` already exist by now,
+    # it's the post-roll ones we have to wait for
+    await asyncio.sleep(s.post_roll_seconds)
+
+    splice_start = when - timedelta(seconds=s.pre_roll_seconds)
+    splice_end = when + timedelta(seconds=s.post_roll_seconds)
+    segments = buffer.segments_covering(splice_start, splice_end)
+
+    if not segments:
+        # buffer empty/not running (e.g. just after a restart, before the
+        # first segment lands) — fall back to a plain post-trigger export
+        # so a feed event never silently produces nothing, just without
+        # the pre-roll
+        await _record_clip_live_export(final_path, s.recording_seconds)
+    else:
+        list_path = recordings_dir() / f".{final_path.name}.txt"
+        list_path.write_text("".join(f"file '{p.resolve()}'\n" for p in segments))
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_path),
+                "-c", "copy", "-movflags", "+faststart", str(final_path),
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await proc.wait()
+        finally:
+            list_path.unlink(missing_ok=True)
+
+    if not final_path.exists():
+        return
+
+    _cleanup_old()
+
+
+async def _record_clip_live_export(final_path: Path, seconds: int) -> None:
     raw_path = final_path.with_suffix(".part")
-    url = (
-        f"http://127.0.0.1:1984/api/stream.mp4"
-        f"?src=petkit_h264&duration={s.recording_seconds}"
-    )
-    timeout = httpx.Timeout(10.0, read=s.recording_seconds + 15)
+    url = f"http://127.0.0.1:1984/api/stream.mp4?src=petkit_h264&duration={seconds}"
+    timeout = httpx.Timeout(10.0, read=seconds + 15)
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream("GET", url) as resp:
@@ -75,11 +110,6 @@ async def _record_clip(when: datetime) -> None:
     )
     await proc.wait()
     raw_path.unlink(missing_ok=True)
-
-    if not final_path.exists():
-        return
-
-    _cleanup_old()
 
 
 def _cleanup_old() -> None:

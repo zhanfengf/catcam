@@ -69,20 +69,19 @@ there:
 
 `app/recorder.py` runs a background poller (every 10s, same
 `times_dispensed` signal as `/admin/history`) and on every real dispense
-fires `GET http://127.0.0.1:1984/api/stream.mp4?src=petkit_h264&duration=60`
-against go2rtc. **Not tied to `/feed` or `/admin/feed` specifically** — it
-watches the HA dispense counter itself, so it fires on *any* real dispense:
-a visitor pressing the site's button, the owner's admin bypass, the PetKit
-app, the physical button on the feeder, or PetKit's own schedule. If `/feed`
-fails before HA actually dispenses (e.g. `502`), no clip is recorded, since
-the counter never moved — it exports a fixed-length clip natively, no separate
-ffmpeg-recording logic needed for the capture itself. Saved to
-`recordings_dir` (default `./recordings`), 7-day rolling retention (oldest
-deleted whenever a new clip lands), served publicly — no auth — via
+splices a clip from the pre-roll buffer (see below). **Not tied to `/feed`
+or `/admin/feed` specifically** — it watches the HA dispense counter itself,
+so it fires on *any* real dispense: a visitor pressing the site's button,
+the owner's admin bypass, the PetKit app, the physical button on the
+feeder, or PetKit's own schedule. If `/feed` fails before HA actually
+dispenses (e.g. `502`), no clip is recorded, since the counter never moved.
+Saved to `recordings_dir` (default `./recordings`), 7-day rolling retention
+(oldest deleted whenever a new clip lands), served publicly — no auth — via
 `GET /recordings` (this JSON list) and static `/clips/*.mp4` (Caddy, not
 this backend).
 
-**Non-obvious:** go2rtc's export is fragmented MP4 (the same format it
+**Non-obvious:** go2rtc's duration-limited export (`/api/stream.mp4?...`,
+used by the fallback path below) is fragmented MP4 (the same format it
 streams over WebSocket/MSE) — a plain `<video src>` tag can silently fail to
 ever load it (`readyState` stuck at `0`, no error event, looks like a slow
 network rather than a format problem). Fixed by remuxing immediately after
@@ -90,6 +89,51 @@ download: `ffmpeg -i raw -c copy -movflags +faststart final.mp4`
 (lossless, ~0.4s for a 60s clip). Downloads go to a `.part` suffix (not
 `.mp4`) first so a crash mid-download/remux can never leave a half-written
 file visible in the public listing.
+
+## Pre-roll buffer
+
+A fixed-length export starting *after* the dispense signal arrives can
+never show the cat running over to eat — by the time the backend even
+learns a dispense happened (HA/PetKit cloud sync alone can take seconds to
+tens of seconds, confirmed via HA's history API: ~6s for a manual app feed,
+~27s for a scheduled auto-feed), the cat may already be at the bowl. There's
+no way to retroactively capture footage that was never recorded, so
+`app/buffer.py` records continuously instead of waiting for a trigger: a
+long-running `ffmpeg -c copy` process pulls `petkit_h264` from go2rtc's own
+RTSP server (`rtsp://127.0.0.1:8554/petkit_h264` — go2rtc serves every
+configured stream name over RTSP, not just the internal exec-mode sink
+paths) and writes it as rolling 5-second segments (`-f segment
+-segment_time 5 -strftime 1`) into `buffer_dir` (default `./buffer`),
+deleting anything older than `buffer_window_seconds` (default 180s). Being
+`-c copy` (no re-encode) this costs almost no extra CPU on top of the VAAPI
+encode `petkit_h264` already does — see the `my-homelab` skill's catcam
+section for why that encode is VAAPI hardware and not libx264 software.
+
+**Non-obvious:** ffmpeg's `-strftime 1` filenames use the *spawned
+process's* wall clock, not Python's `datetime.now(tz())`. `go2rtc.service`
+sets `Environment=TZ=Asia/Hong_Kong`, but `catcam.service` doesn't (the CT's
+system clock is UTC) — the buffer's ffmpeg subprocess has to be launched
+with `TZ=Asia/Hong_Kong` explicitly (`env={**os.environ, "TZ": ...}` in
+`asyncio.create_subprocess_exec`), or its filenames end up ~8h "behind" by
+the time `segments_covering()`/`_cleanup_old()` parse them as HK time —
+every segment looks instantly older than `buffer_window_seconds` and gets
+deleted within one cleanup cycle (5s), so the buffer silently never holds
+more than one near-empty file no matter how long it runs.
+
+When `recorder.py`'s poller detects a dispense at time `T`, it waits
+`post_roll_seconds` (default 45s) for the buffer to actually have footage
+past `T`, then pulls every segment overlapping
+`[T - pre_roll_seconds, T + post_roll_seconds]` (default 3s pre-roll) and
+losslessly concatenates them (`ffmpeg -f concat -c copy`, same technique as
+the weekly highlight reel) into the final clip — so the published clip now
+starts *before* the dispense, not after it. Selection is whole-segment, not
+frame-exact, so the actual pre-roll included is rounded up to the nearest
+`buffer_segment_seconds` boundary (e.g. a 3s `pre_roll_seconds` against 5s
+segments typically pulls in one full preceding segment, closer to ~5s of
+real pre-roll than exactly 3). If the buffer has nothing
+covering that window (just restarted, `petkit_h264` briefly down), it falls
+back to the old duration-limited go2rtc export — a plain post-trigger clip
+with no pre-roll, rather than no clip at all.
 
 ## Weekly highlight reel
 

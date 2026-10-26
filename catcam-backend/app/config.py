@@ -45,6 +45,12 @@ class Settings(BaseSettings):
 
     highlights_dir: str = "./highlights"
 
+    buffer_dir: str = "./buffer"
+    buffer_segment_seconds: int = 5
+    buffer_window_seconds: int = 180
+    pre_roll_seconds: int = 3
+    post_roll_seconds: int = 45
+
     @property
     def open_t(self) -> time:
         return _parse_hhmm(self.open_time)

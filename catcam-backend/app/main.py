@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import db, ha, highlights, recorder
+from . import buffer, db, ha, highlights, recorder
 from .config import get_settings
 from .ratelimit import check_ip
 from .scheduling import build_status, day_start, now
@@ -21,11 +21,13 @@ _feed_lock = asyncio.Lock()
 async def lifespan(app: FastAPI):
     s = get_settings()
     db.init_db(s.db_path)
+    buffer.start()
     recorder.start()
     highlights.start()
     yield
     recorder.stop()
     highlights.stop()
+    buffer.stop()
 
 
 app = FastAPI(title="CatCam Feeder API", lifespan=lifespan)
