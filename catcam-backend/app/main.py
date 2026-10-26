@@ -75,6 +75,7 @@ async def status():
     body = build_status(last)
     body["fed_today"] = db.count_feeds_today(day_start(now()))
     body["ha_online"] = ha.is_online()
+    body["announcement"] = db.get_announcement()
     if not body["ha_online"]:
         # HA unreachable overrides the time/cooldown-based reason — no point
         # telling a visitor "try again in 5 min" when the feeder itself is
@@ -209,6 +210,36 @@ async def admin_feed_test(request: Request):
 
     new_status = build_status(db.get_last_fed_at())
     return {"ok": True, "message": "模擬出糧完成，冇影響真實統計！🧪🐱", **new_status}
+
+
+@app.post("/admin/announcement")
+async def admin_set_announcement(request: Request):
+    ip = client_ip(request)
+
+    if not check_ip(ip):
+        return JSONResponse(
+            status_code=429,
+            content={"ok": False, "reason": "too_many_requests",
+                     "message": "撳得太密啦，唞一唞先"},
+        )
+
+    timestamp = request.headers.get("x-admin-timestamp", "")
+    signature = request.headers.get("x-admin-signature", "")
+    if not verify_admin_signature("POST", "/admin/announcement", timestamp, signature):
+        return JSONResponse(
+            status_code=403,
+            content={"ok": False, "reason": "unauthorized",
+                     "message": "密碼唔啱或者已過期"},
+        )
+
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    text = str(body.get("text") or "").strip()[:500]
+    db.set_announcement(text, now())
+
+    return {"ok": True, "announcement": text}
 
 
 @app.get("/admin/history")

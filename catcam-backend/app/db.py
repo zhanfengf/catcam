@@ -22,6 +22,13 @@ def init_db(db_path: str) -> None:
                amount INTEGER
            )"""
     )
+    _conn.execute(
+        """CREATE TABLE IF NOT EXISTS announcement_log (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               text TEXT NOT NULL,
+               created_at TEXT NOT NULL
+           )"""
+    )
     _conn.commit()
 
 
@@ -57,6 +64,41 @@ def record_feed(fed_at: datetime, ip: str | None, amount: int, source: str = "pu
             (fed_at.isoformat(), ip, amount),
         )
         conn.commit()
+
+
+def get_announcement() -> str:
+    with _lock:
+        row = _db().execute(
+            "SELECT value FROM state WHERE key = 'announcement'"
+        ).fetchone()
+    return row[0] if row and row[0] else ""
+
+
+def set_announcement(text: str, created_at: datetime) -> None:
+    with _lock:
+        conn = _db()
+        conn.execute(
+            "INSERT INTO state (key, value) VALUES ('announcement', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (text,),
+        )
+        # append-only — every save lands a new row here, even if the text is
+        # unchanged, so "幾時改過公告" has a real answer instead of only
+        # knowing what's currently live in `state`
+        conn.execute(
+            "INSERT INTO announcement_log (text, created_at) VALUES (?, ?)",
+            (text, created_at.isoformat()),
+        )
+        conn.commit()
+
+
+def get_announcement_log(limit: int = 20) -> list[dict]:
+    with _lock:
+        rows = _db().execute(
+            "SELECT text, created_at FROM announcement_log ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [{"text": r[0], "created_at": r[1]} for r in rows]
 
 
 def count_feeds_today(day_start: datetime) -> int:

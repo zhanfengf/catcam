@@ -76,6 +76,26 @@ export async function adminFeedTest(token) {
   return { httpOk: r.ok, status: r.status, data };
 }
 
+export async function adminSetAnnouncement(token, text) {
+  const { timestamp, signature } = await signAdminRequest(token, 'POST', '/admin/announcement');
+  const r = await fetch(`${API_BASE}/admin/announcement`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Admin-Timestamp': timestamp,
+      'X-Admin-Signature': signature
+    },
+    body: JSON.stringify({ text })
+  });
+  let data = {};
+  try {
+    data = await r.json();
+  } catch (e) {
+
+  }
+  return { httpOk: r.ok, status: r.status, data };
+}
+
 export async function adminHistory(token) {
   const { timestamp, signature } = await signAdminRequest(token, 'GET', '/admin/history');
   const r = await fetch(`${API_BASE}/admin/history`, {

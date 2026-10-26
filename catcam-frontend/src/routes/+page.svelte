@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import '../app.css';
-  import { getStatus, feed, adminFeed, adminFeedTest, adminHistory, getRecordings } from '$lib/api.js';
+  import { getStatus, feed, adminFeed, adminFeedTest, adminSetAnnouncement, adminHistory, getRecordings } from '$lib/api.js';
   import { VideoRTC } from '$lib/video-rtc.js';
 
   const ADMIN_TOKEN_KEY = 'catcam_admin_token';
@@ -49,6 +49,12 @@
       adminTestReady: '🧪 模擬訪客出糧（唔計統計）',
       adminTestFeeding: '模擬出糧緊…',
       adminTestFallback: '模擬出糧完成，冇影響真實統計！🧪🐱',
+      announcementSectionTitle: '📢 公告欄',
+      announcementPlaceholder: '輸入公告內容，留空即係唔顯示',
+      announcementSaveBtn: '儲存公告',
+      announcementSaving: '儲存緊…',
+      announcementSaved: '公告已更新！📢',
+      announcementSaveFail: '儲存失敗',
       wrongPwFallback: '密碼唔啱或者已過期',
       adminLockBtn: '🔒 鎖返',
       refreshLabel: '重新整理鏡頭',
@@ -104,6 +110,12 @@
       adminTestReady: '🧪 Simulate Visitor Feed (not counted)',
       adminTestFeeding: 'Simulating feed…',
       adminTestFallback: 'Simulated feed done, no effect on real stats! 🧪🐱',
+      announcementSectionTitle: '📢 Announcement',
+      announcementPlaceholder: 'Announcement text, leave empty to hide it',
+      announcementSaveBtn: 'Save announcement',
+      announcementSaving: 'Saving…',
+      announcementSaved: 'Announcement updated! 📢',
+      announcementSaveFail: 'Save failed',
       wrongPwFallback: 'Wrong password or expired',
       adminLockBtn: '🔒 Lock',
       refreshLabel: 'Refresh camera',
@@ -184,6 +196,11 @@
   let history = null;
   let historyLoading = false;
   let historyError = false;
+
+  const ANNOUNCEMENT_DISMISSED_KEY = 'catcam_announcement_dismissed';
+  let showAnnouncement = false;
+  let announcementDraft = null;
+  let savingAnnouncement = false;
 
   async function refresh() {
     try {
@@ -305,6 +322,7 @@
     localStorage.removeItem(ADMIN_TOKEN_KEY);
     showToast('ok', t.lockedToast);
     history = null;
+    announcementDraft = null;
   }
 
   function formatPetkitTime(ts) {
@@ -367,6 +385,40 @@
     }
     await refresh();
     if (adminToken) loadHistory();
+  }
+
+  // pops up once per distinct announcement text — dismissing stores that
+  // exact text, so only a genuinely new/changed announcement re-opens it
+  $: if (status?.announcement && status.announcement !== localStorage.getItem(ANNOUNCEMENT_DISMISSED_KEY)) {
+    showAnnouncement = true;
+  }
+
+  function dismissAnnouncement() {
+    localStorage.setItem(ANNOUNCEMENT_DISMISSED_KEY, status.announcement);
+    showAnnouncement = false;
+  }
+
+  // one-time prefill when the admin panel first has both a token and a
+  // loaded status — not a plain assignment on every status poll, which
+  // would wipe out whatever the admin is mid-typing every 15s
+  $: if (adminToken && status && announcementDraft === null) {
+    announcementDraft = status.announcement ?? '';
+  }
+
+  async function onSaveAnnouncement() {
+    if (savingAnnouncement || !adminToken) return;
+    savingAnnouncement = true;
+    const { httpOk, data } = await adminSetAnnouncement(adminToken, announcementDraft ?? '');
+    savingAnnouncement = false;
+    if (httpOk && data.ok) {
+      showToast('ok', t.announcementSaved);
+    } else {
+      showToast('err', data.message || t.announcementSaveFail);
+      if (data.reason === 'unauthorized') {
+        lockAdmin();
+      }
+    }
+    await refresh();
   }
 
   $: canFeed = status?.can_feed;
@@ -500,6 +552,21 @@
 
       <div class="history">
         <div class="history-head">
+          <div class="history-title">{t.announcementSectionTitle}</div>
+        </div>
+        <textarea
+          class="announcement-input"
+          placeholder={t.announcementPlaceholder}
+          bind:value={announcementDraft}
+          maxlength="500"
+        ></textarea>
+        <button class="admin-btn" disabled={savingAnnouncement} on:click={onSaveAnnouncement}>
+          {savingAnnouncement ? t.announcementSaving : t.announcementSaveBtn}
+        </button>
+      </div>
+
+      <div class="history">
+        <div class="history-head">
           <div class="history-title">{t.historyTitle}</div>
           <button class="history-refresh" on:click={loadHistory} disabled={historyLoading} aria-label={t.historyRefresh}>↻</button>
         </div>
@@ -527,6 +594,20 @@
     <div class="toast {toast.type}">{toast.text}</div>
   {/if}
 </main>
+
+{#if showAnnouncement}
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div class="modal-backdrop" role="presentation" on:click={dismissAnnouncement}>
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="modal" role="presentation" on:click|stopPropagation>
+      <button class="modal-close" on:click={dismissAnnouncement}>✕</button>
+      <div class="modal-icon">📢</div>
+      <p class="announcement-text">{status.announcement}</p>
+    </div>
+  </div>
+{/if}
 
 {#if showAdminModal}
   <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -1120,6 +1201,26 @@
     color: #fff;
     background: var(--gradient-teal-orange);
     cursor: pointer;
+  }
+  .announcement-text {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-line;
+  }
+  .announcement-input {
+    width: 100%;
+    min-height: 72px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--bg, #ffffff);
+    color: inherit;
+    font-size: 13px;
+    font-family: inherit;
+    resize: vertical;
+    margin-bottom: 8px;
+    box-sizing: border-box;
   }
 
   .info-modal {
