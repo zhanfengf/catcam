@@ -83,6 +83,33 @@ PetKit-side dispense history:
 
 <img src="docs/screenshots/admin-panel.png" width="260" alt="Admin panel: force feed, simulated test feed, announcement banner, auto-feed windows, and today's PetKit feed history">
 
+## Camera streaming (and why it goes through the cloud)
+
+The camera here is a **PetKit YumShare Solo** — a smart feeder with a built-in
+camera, not a normal IP camera. It has **no native RTSP or ONVIF output**, so
+there is no `rtsp://…` URL to pull from directly the way you would with a
+generic IP cam. PetKit delivers video over its own proprietary cloud protocol,
+and the only supported path into Home Assistant is a cloud WHEP session.
+
+That cloud hop is the weak link: on the **free tier (no "Care+" subscription)**
+PetKit periodically tears down the camera session, which is the root cause of
+the occasional "no live picture" outages (recovery is documented in the
+`my-homelab` skill — reload the PetKit HA integration, then restart go2rtc).
+
+```
+How CatCam serves the feed today (half-cloud):
+
+  YumShare Solo ──encrypted upload──► PetKit cloud ──WHEP──► HA ──► go2rtc ──► this site
+                                       ▲
+                            free tier (no Care+): this hop drops periodically —
+                            the root cause of the "no live picture" outages
+```
+
+A fully-local, cloud-free path is *possible* but not built in — it needs a
+community reverse-engineering project (e.g. `petkit-local` / LocalKit) that
+re-provisions the device to a local stand-in server. That migration is tracked
+as a separate project plan, not part of this repo.
+
 ## Tech stack
 
 - **Backend:** Python, FastAPI, Uvicorn, httpx, SQLite
