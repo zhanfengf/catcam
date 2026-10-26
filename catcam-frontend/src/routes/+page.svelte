@@ -203,6 +203,16 @@
       // the listener and the component closes its own WebSocket 5s later.
       this.visibilityCheck = false;
     }
+
+    oninit() {
+      super.oninit();
+      // a live MSE stream has no real timeline, so the browser's native video
+      // controls (scrubber + mute/fullscreen/⋮) just flicker and reset on hover,
+      // looking like the stream keeps reloading. VideoRTC's own oninit sets
+      // controls=true; flip it off here, after super runs. oninit only fires
+      // once on connectedCallback, so this survives ws reconnects.
+      this.video.controls = false;
+    }
   }
 
   let status = null;
