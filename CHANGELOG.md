@@ -4,6 +4,10 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.14.1 — 餵食動態改聊天式排序(最新喺底)+ 自動捲到底(2026-10-27)
+
+- `c0f2b93` Flip the activity feed to chat order with auto-scroll to newest——餵食動態欄由「最新喺頂」改做**聊天式(最舊喺頂、最新喺底)**,令每次「🤖/🍚 餵咗 → 📹 錄影好咗」一對訊息由上往下順住讀,同最初參考圖一致。有新提示時用 `afterUpdate` **自動捲到底**(只喺行數真係變咗先捲,唔會同捲返上去睇舊紀錄嘅用戶打交)。提示多過個欄高度就出 scrollbar、只顯示當日事件。純前端。
+
 ## v0.14.0 — 秘密通道可設定自動餵食安全網時段(2026-10-27)
 
 - `466504a` Add owner-configurable auto-feed safety-net windows——秘密通道加咗「🤖 自動餵食時段」:每行一個 `HH:MM-HH:MM`。背景排程(`app/autofeed.py`,每 60 秒)喺每個時段完結時檢查,如果**期間冇任何人餵過**(睇 `feed_event`,連 PetKit app/機身掣都算)就自動餵一份——放低 `auto_feed_pending` marker、`ha.dispense()`、`record_feed(..., 'auto:system', source='auto')`。recorder 偵測到出糧時讀 marker,將嗰條 `feed_event` 標 `source='auto'` + `note=時段`,所以餵食動態會出一條 🤖「冇人喺 07:00-07:30 餵 Roll Roll,自動餵咗一份乾糧。下次可以餵:120 分鐘後」(一樣兩段式,後面跟「📹 錄影好咗」)。自動餵**會**啟動 120 分鐘公眾冷卻(`record_feed` 而家除咗 `admin` 以外所有 source 都推進 `last_fed_at`),但標 `auto:` 排除喺「訪客餵食咗」統計之外。`feed_event` 加 `source`/`note` 欄(帶 PRAGMA 守護嘅 migration);`auto_feed_handled`(`{時段: 日期}`)持久化,重啟唔會重複餵同一個時段;超過時段結束 60 分鐘 grace 就唔補餵(避免服務停過之後遲幾個鐘先餵)。新增 `GET /status` 嘅 `auto_feed_windows`、`POST /admin/auto-feed`,兩份 Caddyfile 都加咗 `/admin/auto-feed` route。
