@@ -4,13 +4,9 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
-## v0.13.6 — ⓘ hover 改做淨係變綠字(2026-10-27)
+## v0.13.5 — 標題 ⓘ 掣 hover 變綠色字(2026-10-27)
 
-- `37ca01a` Simplify the info (ⓘ) hover to just a green glyph——按更正,標題嘅 ⓘ 掣 hover 只變綠色字體(`--accent-strong`),唔要 v0.13.5 加嘅正方形外框同 10% 透明綠底。✕ 同 Instagram chip 維持完整 `button-ghost`(框 + 字 + 底),ⓘ 就淨係變色。純前端。
-
-## v0.13.5 — 標題 ⓘ 掣都套用 button-ghost hover(2026-10-27)
-
-- `fef907a` Apply the button-ghost hover to the title info (ⓘ) button——「Roll Roll 直播」標題隔籬嗰個 ⓘ 掣,hover 都換成同公告 ✕、Instagram chip 一致嘅 Lattice `button-ghost` pattern(綠色正方形框 + 綠色圖示 + 10% 透明綠底)。bare icon 掣預留 2px 透明框防跳位。純前端。
+- `37ca01a` Info (ⓘ) hover turns the glyph emerald——「Roll Roll 直播」標題隔籬嗰個 ⓘ 掣,hover 時字體變綠色(`--accent-strong`),冇外框、冇底色——有別於公告 ✕ 同 Instagram chip 嗰個完整 `button-ghost` pattern(框 + 字 + 10% 透明綠底)。純前端。
 
 ## v0.13.4 — 公告 ✕ hover 補 10% 透明綠底(Lattice button-ghost pattern)(2026-10-27)
 
