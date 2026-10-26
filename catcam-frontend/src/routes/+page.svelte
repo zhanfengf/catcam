@@ -84,7 +84,6 @@
       recordingsError: '攞唔到錄影',
       recordingsColTime: '時間',
       activityTitle: '餵食動態',
-      activitySub: '每次餵 Roll Roll 都會自動留低一條 60 秒錄影',
       activitySystem: '系統 / system',
       activityFedMsg: '🍚 啱啱餵咗 Roll Roll',
       activityFedPending: '錄影整緊…',
@@ -156,7 +155,6 @@
       recordingsError: "Couldn't load clips",
       recordingsColTime: 'Time',
       activityTitle: 'Feeding Activity',
-      activitySub: 'Every feed auto-saves a 60-second clip',
       activitySystem: 'system',
       activityFedMsg: '🍚 Just fed Roll Roll',
       activityFedPending: 'clip rendering…',
@@ -618,7 +616,6 @@
       <div class="activity-head">
         <div class="activity-title">{t.activityTitle}</div>
       </div>
-      <p class="activity-sub">{t.activitySub}</p>
       <div class="activity-feed">
         {#if activityLoading && !activity}
           <p class="activity-state">{t.activityLoading}</p>
@@ -898,16 +895,17 @@
   }
   @media (min-width: 1100px) {
     main {
-      max-width: 1300px;
+      /* desktop: fill the viewport edge-to-edge instead of a centered column —
+         the live view is the point, let it take the whole screen. This upscales
+         past the camera's native 1728px on very wide monitors, the explicit
+         trade for 佈滿畫面. */
+      max-width: none;
     }
-  }
-  @media (min-width: 1600px) {
-    main {
-      /* camera's native resolution is 1728x1080 — capping here avoids
-         upscaling the video past its real pixel density on bigger screens.
-         Kept below that cap so the hint line still fits under the video
-         without scrolling on common desktop viewport heights. */
-      max-width: 1550px;
+    .stage {
+      /* but don't let a wide video overflow a short window — cap by viewport
+         height; the video's object-fit:cover crops rather than distorts when
+         the box ends up wider than 16/9 */
+      max-height: calc(100vh - 160px);
     }
   }
 
@@ -1162,15 +1160,11 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    margin-bottom: 10px;
   }
   .activity-title {
     font-size: 13px;
     font-weight: 700;
-  }
-  .activity-sub {
-    margin: 2px 0 10px;
-    font-size: 11px;
-    color: var(--text-dim);
   }
   .activity-feed {
     flex: 1;
