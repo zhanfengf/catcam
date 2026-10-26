@@ -4,6 +4,10 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.14.0 — 秘密通道可設定自動餵食安全網時段(2026-10-27)
+
+- `466504a` Add owner-configurable auto-feed safety-net windows——秘密通道加咗「🤖 自動餵食時段」:每行一個 `HH:MM-HH:MM`。背景排程(`app/autofeed.py`,每 60 秒)喺每個時段完結時檢查,如果**期間冇任何人餵過**(睇 `feed_event`,連 PetKit app/機身掣都算)就自動餵一份——放低 `auto_feed_pending` marker、`ha.dispense()`、`record_feed(..., 'auto:system', source='auto')`。recorder 偵測到出糧時讀 marker,將嗰條 `feed_event` 標 `source='auto'` + `note=時段`,所以餵食動態會出一條 🤖「冇人喺 07:00-07:30 餵 Roll Roll,自動餵咗一份乾糧。下次可以餵:120 分鐘後」(一樣兩段式,後面跟「📹 錄影好咗」)。自動餵**會**啟動 120 分鐘公眾冷卻(`record_feed` 而家除咗 `admin` 以外所有 source 都推進 `last_fed_at`),但標 `auto:` 排除喺「訪客餵食咗」統計之外。`feed_event` 加 `source`/`note` 欄(帶 PRAGMA 守護嘅 migration);`auto_feed_handled`(`{時段: 日期}`)持久化,重啟唔會重複餵同一個時段;超過時段結束 60 分鐘 grace 就唔補餵(避免服務停過之後遲幾個鐘先餵)。新增 `GET /status` 嘅 `auto_feed_windows`、`POST /admin/auto-feed`,兩份 Caddyfile 都加咗 `/admin/auto-feed` route。
+
 ## v0.13.5 — ⓘ hover 變綠字 + 資訊卡/錄影卡 ✕ 套用 button-ghost(2026-10-27)
 
 - `37ca01a` Info (ⓘ) hover turns the glyph emerald——「Roll Roll 直播」標題隔籬嗰個 ⓘ 掣,hover 時字體變綠色(`--accent-strong`),冇外框、冇底色——有別於下面幾個 ✕ 嗰個完整 `button-ghost` pattern。純前端。
