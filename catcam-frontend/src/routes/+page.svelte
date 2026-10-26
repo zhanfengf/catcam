@@ -1508,6 +1508,24 @@
        the Instagram handle chip */
     background: rgba(6, 201, 136, 0.1);
   }
+  /* same button-ghost hover on the Roll Roll info card's ✕ (and the recordings
+     card, which shares .info-modal chrome) */
+  .info-modal .modal-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    line-height: 1;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    transition: color 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+  }
+  .info-modal .modal-close:hover {
+    color: var(--accent-strong);
+    border-color: var(--accent-strong);
+    background: rgba(6, 201, 136, 0.1);
+  }
   .announcement-modal .announcement-text {
     font-size: 23px;
     line-height: 1.65;
