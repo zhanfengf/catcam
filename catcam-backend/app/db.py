@@ -60,12 +60,13 @@ def record_feed(fed_at: datetime, ip: str | None, amount: int, source: str = "pu
 
 
 def count_feeds_today(day_start: datetime) -> int:
-    # public (visitor) feeds only — admin/secret-channel feeds are excluded,
-    # matching the "訪客食咗" label this backs
+    # public (visitor) feeds only — admin/secret-channel feeds (including
+    # the admin_test simulated-visitor button) are excluded, matching the
+    # "訪客餵食咗" label this backs
     with _lock:
         row = _db().execute(
             "SELECT COUNT(*) FROM feed_log WHERE fed_at >= ? "
-            "AND (ip IS NULL OR ip NOT LIKE 'admin:%')",
+            "AND (ip IS NULL OR (ip NOT LIKE 'admin:%' AND ip NOT LIKE 'admin_test:%'))",
             (day_start.isoformat(),),
         ).fetchone()
     return row[0] if row else 0

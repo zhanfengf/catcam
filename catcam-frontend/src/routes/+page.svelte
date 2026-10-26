@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import '../app.css';
-  import { getStatus, feed, adminFeed, adminHistory, getRecordings } from '$lib/api.js';
+  import { getStatus, feed, adminFeed, adminFeedTest, adminHistory, getRecordings } from '$lib/api.js';
   import { VideoRTC } from '$lib/video-rtc.js';
 
   const ADMIN_TOKEN_KEY = 'catcam_admin_token';
@@ -36,6 +36,7 @@
       connErr: '連唔到伺服器，遲啲再試',
       fedFallback: '餵咗喇！🐱',
       cantFeedFallback: '而家餵唔到',
+      feederOffline: '🔌 餵食機離線',
       secretTitle: '秘密通道',
       secretSub: '輸入密碼解鎖管理工具',
       pwPlaceholder: '輸入密碼',
@@ -45,6 +46,9 @@
       adminFeedReady: '🔓 強制餵貓（繞過規則）',
       adminFeedFeeding: '強制餵緊…',
       adminFedFallback: '強制餵咗喇！🔓🐱',
+      adminTestReady: '🧪 模擬訪客出糧（唔計統計）',
+      adminTestFeeding: '模擬出糧緊…',
+      adminTestFallback: '模擬出糧完成，冇影響真實統計！🧪🐱',
       wrongPwFallback: '密碼唔啱或者已過期',
       adminLockBtn: '🔒 鎖返',
       refreshLabel: '重新整理鏡頭',
@@ -87,6 +91,7 @@
       connErr: "Can't connect, try again later",
       fedFallback: 'Fed! 🐱',
       cantFeedFallback: "Can't feed right now",
+      feederOffline: '🔌 Feeder Offline',
       secretTitle: 'Secret Channel',
       secretSub: 'Enter password to unlock admin tools',
       pwPlaceholder: 'Password',
@@ -96,6 +101,9 @@
       adminFeedReady: '🔓 Force Feed (bypass rules)',
       adminFeedFeeding: 'Force feeding…',
       adminFedFallback: 'Force fed! 🔓🐱',
+      adminTestReady: '🧪 Simulate Visitor Feed (not counted)',
+      adminTestFeeding: 'Simulating feed…',
+      adminTestFallback: 'Simulated feed done, no effect on real stats! 🧪🐱',
       wrongPwFallback: 'Wrong password or expired',
       adminLockBtn: '🔒 Lock',
       refreshLabel: 'Refresh camera',
@@ -172,6 +180,7 @@
   let adminPassword = '';
   let adminToken = null;
   let adminFeeding = false;
+  let adminTesting = false;
   let history = null;
   let historyLoading = false;
   let historyError = false;
@@ -343,12 +352,31 @@
     if (adminToken) loadHistory();
   }
 
+  async function onAdminFeedTest() {
+    if (adminTesting || !adminToken) return;
+    adminTesting = true;
+    const { httpOk, data } = await adminFeedTest(adminToken);
+    adminTesting = false;
+    if (httpOk && data.ok) {
+      showToast('ok', data.message || t.adminTestFallback);
+    } else {
+      showToast('err', data.message || t.wrongPwFallback);
+      if (data.reason === 'unauthorized') {
+        lockAdmin();
+      }
+    }
+    await refresh();
+    if (adminToken) loadHistory();
+  }
+
   $: canFeed = status?.can_feed;
   $: btnLabel = feeding
     ? t.feedBtnFeeding
     : canFeed
       ? t.feedBtnReady
-      : `${t.feedBtnReady} ${fmt(localSecs, t)}`.trim();
+      : status?.reason === 'ha_offline'
+        ? t.feederOffline
+        : `${t.feedBtnReady} ${fmt(localSecs, t)}`.trim();
 
   function initCamera() {
     if (!videoRtcEl) return;
@@ -465,6 +493,9 @@
       {/if}
       <button class="admin-btn" disabled={adminFeeding} on:click={onAdminFeed}>
         {adminFeeding ? t.adminFeedFeeding : t.adminFeedReady}
+      </button>
+      <button class="admin-btn" disabled={adminTesting} on:click={onAdminFeedTest}>
+        {adminTesting ? t.adminTestFeeding : t.adminTestReady}
       </button>
 
       <div class="history">

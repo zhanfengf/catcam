@@ -24,7 +24,9 @@ async def lifespan(app: FastAPI):
     buffer.start()
     recorder.start()
     highlights.start()
+    ha.start()
     yield
+    ha.stop()
     recorder.stop()
     highlights.stop()
     buffer.stop()
@@ -72,6 +74,13 @@ async def status():
     last = db.get_last_fed_at()
     body = build_status(last)
     body["fed_today"] = db.count_feeds_today(day_start(now()))
+    body["ha_online"] = ha.is_online()
+    if not body["ha_online"]:
+        # HA unreachable overrides the time/cooldown-based reason — no point
+        # telling a visitor "try again in 5 min" when the feeder itself is
+        # down right now
+        body["can_feed"] = False
+        body["reason"] = "ha_offline"
     return body
 
 
@@ -155,6 +164,51 @@ async def admin_feed(request: Request):
 
     new_status = build_status(db.get_last_fed_at())
     return {"ok": True, "message": "強制餵咗喇！🔓🐱", **new_status}
+
+
+@app.post("/admin/feed-test")
+async def admin_feed_test(request: Request):
+    ip = client_ip(request)
+
+    if not check_ip(ip):
+        return JSONResponse(
+            status_code=429,
+            content={"ok": False, "reason": "too_many_requests",
+                     "message": "撳得太密啦，唞一唞先"},
+        )
+
+    timestamp = request.headers.get("x-admin-timestamp", "")
+    signature = request.headers.get("x-admin-signature", "")
+    if not verify_admin_signature("POST", "/admin/feed-test", timestamp, signature):
+        return JSONResponse(
+            status_code=403,
+            content={"ok": False, "reason": "unauthorized",
+                     "message": "密碼唔啱或者已過期"},
+        )
+
+    async with _feed_lock:
+        s = get_settings()
+        try:
+            await ha.dispense(s.feed_amount)
+        except ha.HAError as exc:
+            return JSONResponse(
+                status_code=502,
+                content={"ok": False, "reason": "ha_error",
+                         "message": "餵食機而家連唔到，遲啲再試",
+                         "detail": str(exc)},
+            )
+
+        fed_at = now()
+        # source="admin" keeps this out of the public cooldown (last_fed_at)
+        # just like /admin/feed — this button is for testing the dispense
+        # pipeline itself, not for actually feeding on the visitor's behalf.
+        # "admin_test:" (not "admin:") so it's excluded from the public
+        # "訪客餵食咗" count the same way, while staying distinguishable in
+        # feed_log from a real forced feed via /admin/feed
+        db.record_feed(fed_at, f"admin_test:{ip}", s.feed_amount, source="admin")
+
+    new_status = build_status(db.get_last_fed_at())
+    return {"ok": True, "message": "模擬出糧完成，冇影響真實統計！🧪🐱", **new_status}
 
 
 @app.get("/admin/history")

@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -111,3 +112,47 @@ async def dispense(amount: int) -> None:
 
     if resp.status_code >= 400:
         raise HAError(f"HA returned {resp.status_code}: {resp.text[:200]}")
+
+
+# background connectivity check, polled independently of /feed attempts so
+# /status can report "offline" and the frontend can disable the feed button
+# before a visitor ever tries and hits a 502
+_online = True
+_POLL_SECONDS = 15
+_task: asyncio.Task | None = None
+
+
+async def _check_online() -> bool:
+    s = get_settings()
+    if not s.ha_token:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{s.ha_url.rstrip('/')}/api/",
+                headers={"Authorization": f"Bearer {s.ha_token}"},
+            )
+        return resp.status_code < 400
+    except httpx.RequestError:
+        return False
+
+
+async def _poll_loop() -> None:
+    global _online
+    while True:
+        _online = await _check_online()
+        await asyncio.sleep(_POLL_SECONDS)
+
+
+def is_online() -> bool:
+    return _online
+
+
+def start() -> None:
+    global _task
+    _task = asyncio.create_task(_poll_loop())
+
+
+def stop() -> None:
+    if _task:
+        _task.cancel()

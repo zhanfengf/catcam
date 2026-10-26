@@ -10,7 +10,7 @@
 	}
 
 	# API endpoints -> uvicorn on 127.0.0.1:8080
-	@api path /status /feed /health /admin/feed /admin/history /recordings
+	@api path /status /feed /health /admin/feed /admin/feed-test /admin/history /recordings
 	handle @api {
 		reverse_proxy 127.0.0.1:8080
 	}
