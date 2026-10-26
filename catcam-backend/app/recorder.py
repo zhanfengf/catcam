@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -7,6 +8,8 @@ import httpx
 from . import buffer
 from .config import get_settings
 from .scheduling import tz
+
+logger = logging.getLogger(__name__)
 
 # same counter driving /admin/history — watching it here too means every
 # real dispense gets a clip, regardless of trigger (site, app, physical
@@ -60,6 +63,7 @@ async def _record_clip(when: datetime) -> None:
         # first segment lands) — fall back to a plain post-trigger export
         # so a feed event never silently produces nothing, just without
         # the pre-roll
+        logger.warning("recorder: no buffer segments covering %s, falling back to live export", when)
         await _record_clip_live_export(final_path, s.recording_seconds)
     else:
         # segments are whole 5s chunks, so concatenating them raw would
@@ -99,6 +103,7 @@ async def _record_clip(when: datetime) -> None:
             concat_raw.unlink(missing_ok=True)
 
     if not final_path.exists():
+        logger.warning("recorder: no clip produced for trigger at %s", when)
         return
 
     _cleanup_old()
@@ -112,11 +117,13 @@ async def _record_clip_live_export(final_path: Path, seconds: int) -> None:
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream("GET", url) as resp:
                 if resp.status_code >= 400:
+                    logger.warning("recorder: live export got HTTP %s from petkit_h264", resp.status_code)
                     return
                 with open(raw_path, "wb") as f:
                     async for chunk in resp.aiter_bytes():
                         f.write(chunk)
-    except httpx.RequestError:
+    except httpx.RequestError as e:
+        logger.warning("recorder: live export request to petkit_h264 failed: %s", e)
         raw_path.unlink(missing_ok=True)
         return
 
