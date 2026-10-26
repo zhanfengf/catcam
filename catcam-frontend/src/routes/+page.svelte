@@ -719,7 +719,7 @@
   <div class="modal-backdrop" role="presentation" on:click={dismissAnnouncement}>
     <!-- svelte-ignore a11y-click-events-have-key-events -->
     <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <div class="modal" role="presentation" on:click|stopPropagation>
+    <div class="modal announcement-modal" role="presentation" on:click|stopPropagation>
       <button class="modal-close" on:click={dismissAnnouncement}>✕</button>
       <div class="modal-icon">📢</div>
       <p class="announcement-text">{status.announcement}</p>
@@ -1467,6 +1467,28 @@
     font-size: 14px;
     line-height: 1.5;
     white-space: pre-line;
+  }
+  /* the announcement popup shares .modal with the admin unlock dialog, so
+     blow up just this one (~2x) via a modifier rather than touching .modal */
+  .announcement-modal {
+    max-width: 640px;
+    padding: 44px 40px 40px;
+    gap: 10px;
+  }
+  .announcement-modal .modal-icon {
+    width: 84px;
+    height: 84px;
+    font-size: 38px;
+    margin-bottom: 10px;
+  }
+  .announcement-modal .modal-close {
+    font-size: 22px;
+    top: 16px;
+    right: 18px;
+  }
+  .announcement-modal .announcement-text {
+    font-size: 23px;
+    line-height: 1.65;
   }
   .announcement-input {
     width: 100%;
