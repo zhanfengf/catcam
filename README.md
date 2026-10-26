@@ -43,6 +43,36 @@ Each folder has its own README with setup and deployment details.
 - **Per-IP anti-spam** — stops a single client hammering the endpoint (separate from the feeding quota).
 - State (`last_fed_at`) is persisted in **SQLite**, so restarts keep the limits.
 
+## Screenshots
+
+The feed button reflects exactly one state at a time — `GET /status` returns
+`can_feed` + a `reason`, and the frontend renders accordingly:
+
+| State | `reason` | What the visitor sees |
+| ----- | -------- | ---------------------- |
+| Ready to feed | `ok` | <img src="docs/screenshots/feed-ready.png" width="220" alt="Feed button ready"> |
+| Cooldown running | `cooldown` | <img src="docs/screenshots/feed-cooldown.png" width="220" alt="Feed button showing cooldown countdown"> |
+| Outside open hours | `outside_hours` | <img src="docs/screenshots/feed-outside-hours.png" width="220" alt="Feed button showing time until open hours"> |
+| Feeder (Home Assistant) unreachable | `ha_offline` | <img src="docs/screenshots/feed-ha-offline.png" width="220" alt="Feed button disabled, feeder offline"> |
+
+`ha_offline` is detected server-side by a background poll against Home
+Assistant (independent of any feed attempt) — the button disables itself
+within ~15s of HA going down, instead of waiting for a visitor to hit it and
+get a 502.
+
+All screenshots above show a live camera frame — captured with
+[`docs/screenshots/camera-live-reference.png`](docs/screenshots/camera-live-reference.png)
+kept as the canonical "online" reference frame, so any future re-capture of
+these screenshots reuses the same scene instead of whatever happens to be in
+frame at capture time.
+
+The hidden admin channel (tap the logo 5×, enter the password) unlocks a
+force-feed button that bypasses all the rules above, a simulate-visitor test
+feed for exercising the dispense pipeline without affecting the public
+cooldown or stats, and today's PetKit-side dispense history:
+
+<img src="docs/screenshots/admin-panel.png" width="260" alt="Admin panel: force feed, simulated test feed, and today's PetKit feed history">
+
 ## Tech stack
 
 - **Backend:** Python, FastAPI, Uvicorn, httpx, SQLite
