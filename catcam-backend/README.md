@@ -26,24 +26,37 @@ service — the Home Assistant token stays here, never in the browser.
 
 | Method | Path             | Purpose                                                |
 | ------ | ---------------- | ------------------------------------------------------- |
-| GET    | `/status`        | Can we feed now? next feed time, window, visitor fed-today count. |
-| POST   | `/feed`          | Try to feed. Enforces all rules, then calls HA.          |
-| POST   | `/admin/feed`    | HMAC-signed bypass (cooldown + open hours) for the owner only. |
-| GET    | `/admin/history` | HMAC-signed. Today's feed events, straight from PetKit (not our own log). |
-| GET    | `/recordings`    | Public. List of this week's 60s feed clips (filename + timestamp). |
-| GET    | `/health`        | Liveness check.                                          |
+| GET    | `/status`             | Can we feed now? next feed time, window, visitor fed-today count, `ha_online`, `announcement`. |
+| POST   | `/feed`               | Try to feed. Enforces all rules, then calls HA.          |
+| POST   | `/admin/feed`         | HMAC-signed bypass (cooldown + open hours) for the owner only. |
+| POST   | `/admin/feed-test`    | HMAC-signed. Dispenses for real (tests the pipeline end to end) but excluded from the public cooldown and the "訪客餵食咗" count. |
+| POST   | `/admin/announcement` | HMAC-signed. Sets (or clears, with `""`) the announcement banner text. |
+| GET    | `/admin/history`      | HMAC-signed. Today's feed events, straight from PetKit (not our own log). |
+| GET    | `/recordings`         | Public. List of this week's 60s feed clips (filename + timestamp). |
+| GET    | `/health`             | Liveness check.                                          |
 
 `POST /feed` returns `200` on success, `403` outside hours, `429` cooldown or
 spam, `502` if HA is unreachable.
 
-`POST /admin/feed` and `GET /admin/history` are the secret-channel endpoints
-the frontend calls after unlocking (tap the logo 5×, enter `ADMIN_TOKEN`).
-Every request must be HMAC-SHA256 signed with `ADMIN_TOKEN` over
-`{METHOD}:{PATH}:{timestamp}` and include a timestamp within
-`ADMIN_SIG_WINDOW_SECONDS` — see `verify_admin_signature()` in `app/main.py`.
-No plaintext password crosses the wire. `/admin/feed` still logs the feed
-(`feed_log`) but — unlike `/feed` — skips cooldown/open-hours checks and
-does **not** touch the public `last_fed_at` or `fed_today`.
+`POST /admin/feed`, `/admin/feed-test`, `/admin/announcement`, and `GET
+/admin/history` are the secret-channel endpoints the frontend calls after
+unlocking (tap the logo 5×, enter `ADMIN_TOKEN`). Every request must be
+HMAC-SHA256 signed with `ADMIN_TOKEN` over `{METHOD}:{PATH}:{timestamp}` and
+include a timestamp within `ADMIN_SIG_WINDOW_SECONDS` — see
+`verify_admin_signature()` in `app/main.py`. No plaintext password crosses
+the wire. Both `/admin/feed` and `/admin/feed-test` log to `feed_log` and —
+unlike `/feed` — skip cooldown/open-hours checks and do **not** touch the
+public `last_fed_at` or `fed_today`; they're told apart in `feed_log` by the
+`ip` column's prefix:
+
+- `admin:<ip>` — `/admin/feed`, the owner's real "feed now regardless"
+  bypass.
+- `admin_test:<ip>` — `/admin/feed-test`, for exercising the real dispense
+  pipeline (HA call, recording trigger) on demand without it looking like
+  either a real forced feed or a real visitor.
+- no prefix — a real `/feed` call from a visitor.
+
+`count_feeds_today()` (the "訪客餵食咗" stat) excludes both prefixes.
 
 `/admin/history` doesn't read our own `feed_log` at all — it queries Home
 Assistant's history API for the PetKit device's `times_dispensed` counter,
@@ -215,6 +228,41 @@ YouTube); fetch it with `pct pull`/`scp` (see the `catcam-ct114-transfer`
 skill). The scheduling loop wraps the compile call in `try`/`except` —
 letting an exception escape would silently kill the `asyncio.Task` forever,
 cancelling every future week until the next service restart.
+
+## HA connectivity check
+
+`app/ha.py` runs a background poll (every 15s, independent of any feed
+attempt) hitting `{HA_URL}/api/` and caching the result in `is_online()`.
+`GET /status` includes this as `ha_online`, and overrides `can_feed`/`reason`
+to `false`/`"ha_offline"` when it's down — so the frontend can disable the
+feed button and show "餵食機離線" within ~15s of HA actually going
+unreachable, instead of a visitor hitting the button and only then getting a
+`502`. A real HA outage also takes down the camera feed (go2rtc's upstream
+WHEP pull goes through HA too), so both go dark together — see the
+`feed-ha-offline.png` screenshot in the root README.
+
+## Announcement banner
+
+A free-text banner the owner can push to every visitor, shown once per
+distinct message as soon as the page loads. `POST /admin/announcement` with
+`{"text": "..."}` sets it (truncated to 500 chars server-side); an empty
+string hides the banner. `GET /status` returns the current text as
+`announcement` — no separate endpoint to fetch it, since the frontend
+already polls `/status` every 15s. The frontend decides whether to (re-)show
+the popup by comparing this text against what it last dismissed
+(`localStorage`), so editing the announcement makes it pop up again for
+everyone, even visitors who already dismissed a previous message.
+
+Two separate things happen on every save, deliberately not conflated into
+one table:
+- `state` (key `announcement`, the same key-value table `last_fed_at` lives
+  in) holds **only the current value** — `set_announcement()` upserts this
+  one row in place. This is what `/status` reads.
+- `announcement_log` (its own table, `id, text, created_at`) gets a **new
+  row appended** on every save, unconditionally — an audit trail of what was
+  pushed and when. Nothing reads it yet (no endpoint/UI), but it means "what
+  did the banner say last Tuesday" has a real answer later without having
+  to have thought to screenshot it at the time.
 
 ## Deploy in the LXC (Debian 13, no Docker)
 

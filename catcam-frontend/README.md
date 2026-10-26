@@ -8,7 +8,8 @@ go2rtc 嘅直播串流。
 ```
 觀眾 → cat.kelvinp.work → Caddy(:80, CT 114)
         ├─ /                                                      → 靜態 SvelteKit build
-        ├─ /status /feed /admin/feed /admin/history /recordings   → reverse_proxy 127.0.0.1:8080（FastAPI 後端）
+        ├─ /status /feed /admin/feed /admin/feed-test
+        │  /admin/announcement /admin/history /recordings          → reverse_proxy 127.0.0.1:8080（FastAPI 後端）
         ├─ /clips/*                                                → 靜態檔（FastAPI 寫落去嘅 60 秒餵食片，唔經後端）
         └─ /camera/*                                                → reverse_proxy 127.0.0.1:1984（go2rtc，rewrite 做 /api/*）
 ```
@@ -33,16 +34,35 @@ WebSocket + MSE 經 `/camera/ws?src=petkit_h264` 重新 serve 出嚟。前端
 
 連續撳 logo 5 次會彈一個密碼 modal。密碼就係後端嘅 `ADMIN_TOKEN`。解鎖
 之後,前端用 Web Crypto（`crypto.subtle`）對請求做 HMAC-SHA256 簽名,解鎖
-之後有兩個功能：
+之後有幾個功能：
 - `POST /admin/feed`：繞過冷卻時間同開放時段直接餵。呢個動作**唔會**影響
   訪客見到嘅倒數——公開冷卻時間同「訪客餵食咗」次數都只跟 `/feed`（訪客觸發）
   走，故意分開。強制餵完會自動 reload 返個紀錄清單。
+- `POST /admin/feed-test`（🧪 模擬訪客出糧）：同樣繞過規則,一樣真係出糧、
+  一樣會觸發餵食錄影,但用嚟測試成條 pipeline 行唔行得通,唔係代訪客餵——
+  `feed_log` 入面用 `admin_test:` 標記,同 `/admin/feed` 嘅 `admin:` 分開,
+  兩個都唔計落「訪客餵食咗」。
+- `POST /admin/announcement`（📢 公告欄）：一個 textarea + 儲存掣,設定/清空
+  訪客一入站就見到嘅公告彈窗文字（留空即隱藏）。
 - `GET /admin/history`：顯示今日 PetKit 裝置本身偵測到嘅每次出糧時間
   （唔係呢個網站自己嘅紀錄——網站觸發嘅餵食最終都會出現喺呢度，所以冇需要
   分開顯示兩份清單）。紀錄標題有個手動重新整理掣，因為 PetKit 雲端同步仍然
   可能有幾秒至幾分鐘延遲。
 
 Token 存喺 `localStorage`，唔會傳明文密碼。
+
+## 餵貓掣狀態 + 公告彈窗
+
+`GET /status` 嘅 `can_feed` + `reason` 決定餵貓掣顯示乜(`ok` / `cooldown` /
+`outside_hours` / `ha_offline`)——`ha_offline` 係後端獨立背景 poll 緊 HA
+嘅結果,同鏡頭個 LIVE/離線 badge(`cameraConnected`,睇 WebSocket 連線狀態)
+係兩件完全唔同嘅嘢,唔好搞混。四種狀態嘅截圖喺根目錄 README。
+
+公告彈窗(`status.announcement`)一入站有內容就自動彈出,用返同秘密通道
+登入 modal 一樣嘅 `.modal`/`.modal-backdrop` 樣式。撳右上角 ✕ 關閉會將
+**嗰句實際文字**(唔係單純一個 boolean)存入 `localStorage`
+(`catcam_announcement_dismissed`),所以如果之後公告內容改咗,訪客會再見到
+新彈窗——唔會因為之前撳過「關閉」就永遠見唔返。
 
 ## 資料卡（ⓘ）
 
@@ -96,12 +116,16 @@ ssh root@upsn150-pve "
 "
 ```
 
-`Caddyfile`（repo 根同 `deploy/` 都有一份,內容要保持一致）已經設定好
-`/` serve 靜態 build、`/status /feed /health /admin/feed /admin/history
+`Caddyfile`（repo 根同 `deploy/` 都有一份,內容要保持一致,**改完兩份都要
+部署去 CT 114 先生效** —— 之前試過淨係改本地 repo 冇 push,新 endpoint
+response 靜默跌去 SPA fallback，攞住 HTML 當 JSON parse，前端顯示完全
+唔相關嘅錯誤）已經設定好 `/` serve 靜態 build、`/status /feed /health
+/admin/feed /admin/feed-test /admin/announcement /admin/history
 /recordings` 代理去後端、`/clips/*` 直接 serve 後端寫落 CT 本機嘅餵食片、
 `/camera/*` 代理去 go2rtc。CT 入面要裝 Caddy(見官方 apt repo 說明)同
 go2rtc,並喺 Cloudflare Tunnel 加一條 route:`cat.kelvinp.work` →
-`http://<CT IP>:80`。
+`http://<CT IP>:80`。新增任何一個 `/admin/*` endpoint,呢度嘅路由清單都要
+同步加返,唔係得 `app/main.py` 加個 route 就夠。
 
 ## 本機預覽(開發用)
 
