@@ -4,6 +4,10 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.13.4 — 公告 ✕ hover 補 10% 透明綠底(Lattice button-ghost pattern)(2026-10-27)
+
+- `d02325c` Add the 10% emerald wash to the announcement close-button hover——承接 v0.13.3,公告彈窗 ✕ 嘅 hover 補返 `rgba(6, 201, 136, 0.1)` 10% 透明綠底,令佢同 Instagram handle chip 完全一致。呢個「綠框 + 綠字/圖示 + 10% 透明綠底」嘅 hover 已經正式記入個人 Lattice design-system(`200_Reference/design-systems/lattice/DESIGN.md`)做 `button-ghost` component + `primary-wash` 色票,係該系統唯一有記錄嘅 hover pattern。純前端。
+
 ## v0.13.3 — 公告彈窗 ✕ hover 加綠色正方形外框(2026-10-27)
 
 - `1039259` Add a green square hover frame to the announcement close button——公告彈窗嘅 ✕ 關閉掣,滑鼠移上去時外面加一個綠色正方形外框、✕ 本身都變綠(`--accent-strong`)。只針對 `.announcement-modal .modal-close`,唔影響其他 modal 共用嘅關閉掣;預設留咗一層透明 2px border,所以 hover 出框時唔會推移到個 ✕。純前端。
