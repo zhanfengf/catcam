@@ -4,6 +4,10 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.13.1 — 電腦版直播佈滿畫面,刪走動態欄副標題(2026-10-26)
+
+- `8022900` Make the live view fill the desktop viewport, drop the activity subtitle——電腦版(≥1100px)直播畫面由原本置中封頂 1550px 改做佈滿成個視窗闊度(`main` 嘅 `max-width` 由 1550px 改做 `none`),同時俾 `.stage` 加咗 `max-height: calc(100vh - 160px)`,確保闊畫面喺矮視窗都唔會 overflow(video 本身 `object-fit:cover`,係裁切而唔係變形)。手機版維持動態欄疊喺直播下面。順手刪走「餵食動態」標題下面嗰句「每次餵 Roll Roll 都會自動留低一條 60 秒錄影」副標題。純前端 CSS/markup,冇郁後端同 Caddy。
+
 ## v0.13.0 — 直播側邊「餵食動態」欄,兩段式餵咗 + 錄影好咗(2026-10-26)
 
 - `45ca110` Add a two-phase public feeding activity feed——直播畫面右邊加咗一欄「餵食動態」(闊芒並排、窄芒疊落畫面下面),唯讀,畀所有訪客睇。每一次真實出糧出**兩條**聊天式訊息:偵測到嗰刻即出「🍚 餵咗 Roll Roll 錄影整緊…」,約一分鐘後錄影 render 好再出「📹 錄影好咗,睇返錄影 ›」(撳得,用返現有 `/clips/<file>` lightbox 播放器)。後端新開一張 `feed_event` 表(`fed_at` + `clip` + `clip_ready_at`):`recorder.py` 喺偵測到出糧嗰刻(`_poll_loop`)即刻 insert 一行(`clip` 做 NULL),錄影整好先 `set_feed_event_clip()` 補返 clip——即係同觸發錄影同一個 `times_dispensed` 信號,所以**連 PetKit app、機身掣、自動餵都影到**,唔止網站觸發嘅餵食。新加嘅 `GET /activity` 回傳今日嘅事件,前端用 `activityLines` 展開成兩行再按時間排。故意同 `feed_log`(「訪客餵食咗」統計,淨係網站餵食、冇錄影資訊)分開兩張表做兩件事,完全冇改動現有嘅餵食/統計邏輯。Caddy `@api` 清單同步加咗 `/activity` route(兩份 Caddyfile 都改,避開之前中過兩次嘅 SPA fallback 伏)。`feed_event` 由後端重啟嗰刻先開始記,之前嘅餵食唔會追溯顯示。
