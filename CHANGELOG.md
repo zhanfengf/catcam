@@ -4,6 +4,14 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.10.0 — HA 離線偵測、模擬訪客測試出糧、README 截圖(2026-10-26)
+
+- `7784459` Add screenshot gallery to README——截咗餵貓制四種狀態(ready/cooldown/outside-hours/ha-offline)同已解鎖嘅 admin 面板,放入 `docs/screenshots/`;ha-offline 嗰張特登喺 Playwright 層面擋晒 camera 嘅 WebSocket(連 constructor 都 mock 咗)同 HLS fallback 先截,因為真實 HA 斷晒嗰陣連鏡頭都會一齊斷,唔淨係餵貓制
+- `3d23b1f` Add HA offline detection and an admin-only simulated-visitor test feed——背景 task 每 15 秒獨立 ping 一次 HA,`/status` 帶多個 `ha_online` 欄位,一旦 HA 連唔到就覆蓋返 `can_feed`/`reason`,前端餵貓制會喺 ~15 秒內自動 disable、顯示「🔌 餵食機離線」,唔使等訪客撳落先見到 502。同時喺秘密通道加咗一粒「🧪 模擬訪客出糧」制(`/admin/feed-test`),出真糧測試成條 dispense pipeline,用 `admin_test:` 標記喺 `feed_log` 排除喺公開「訪客餵食咗」統計同公眾冷卻時間之外(同原有嘅 `admin:` 強制餵分開嚟)
+- `654c8af` Add logging for recorder's silent live-export fallback failures——`recorder.py` 之前 buffer 空咗、或者 live export 嗰個 HTTP call 失敗,會完全靜默咁跳過,而家加返 warning log,下次有「冇生成錄影」嘅報告可以直接喺 log 查到實際卡喺邊一步
+
+今次三個 commit 全部由一次真實嘅 PetKit/Agora WebRTC 斷流事件(2026-10-26,前後斷咗成 45 分鐘)直接驅動——斷流本身發生喺 go2rtc↔Home Assistant 呢一層,同呢個 repo 嘅程式碼完全無關,純屬上游雲端服務嘅瞬斷;但事件暴露咗兩個缺口:冇辦法喺 HA 斷咗嗰刻主動通知訪客(只能等佢撳落先見到錯誤),同埋出糧流程冇一個安全嘅測試手段(每次測試都要用返會污染公開統計嘅強制餵)。呢次改動就係填返呢兩個缺口。
+
 ## v0.9.0 — 24/7 pre-roll 緩衝,餵食片終於見到 Roll Roll 跑過去(2026-10-26)
 
 - `42b426f` Add precise keyframe-accurate trim to the pre-roll splice, tune the window——幫 pre-roll 拼接加多一步精準裁剪(`-ss`/`-t` 喺 concat 完嘅片度再裁一次,`-c copy` 唔轉碼),將原本「成個 5 秒 segment 粗粒度」嘅精度,提升到受限於 keyframe 間距(~1.8 秒)嘅水平。同時將 `pre_roll_seconds`/`post_roll_seconds` 由最初嘅 3/57 調校到 15/45(覆蓋返實測 ~15 秒嘅觸發偵測延遲),總長維持 60 秒
