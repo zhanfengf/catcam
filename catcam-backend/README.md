@@ -167,18 +167,15 @@ post_roll_seconds`) doesn't exist yet at detection time, so that's the part
 5. **Lossless concat.** `ffmpeg -f concat -c copy` stitches the selected
    segments into one continuous stream — same technique as the weekly
    highlight reel, still no re-encode.
-6. **Precise trim** *(design target — not yet implemented as of this
-   writing; current code stops at step 5, so the actual pre-roll included
-   is rounded up to the 5s segment grid rather than exact)*. The
-   concatenated stream starts at the beginning of whichever segment
-   happened to overlap the window first — not necessarily exactly
-   `pre_roll_seconds` before `T`. A second pass (`ffmpeg -ss <offset> -i
-   concat.mp4 -t <pre_roll_seconds + post_roll_seconds> -c copy
-   final.mp4`) would trim to the exact requested window. Still `-c copy`,
-   so it can only cut on a keyframe, not an arbitrary frame — at this
-   encode's GOP size (`-g 50` @ ~27.5fps) that's roughly **±1.8s
-   accuracy**, far tighter than the 5s segment grid, with no re-encode
-   cost.
+6. **Precise trim.** The concatenated stream (from step 5) starts at the
+   beginning of whichever segment happened to overlap the window first —
+   not necessarily exactly `pre_roll_seconds` before `T`. A second pass
+   (`ffmpeg -ss <offset> -i concat.mp4 -t <pre_roll_seconds +
+   post_roll_seconds> -c copy final.mp4`) trims it to the exact requested
+   window. Still `-c copy`, so it can only cut on a keyframe, not an
+   arbitrary frame — at this encode's GOP size (`-g 50` @ ~27.5fps) that's
+   roughly **±1.8s accuracy**, far tighter than the 5s segment grid, with
+   no re-encode cost.
 7. **Save + publish.** The result is written to `recordings_dir`, old clips
    past `recording_retention_days` get cleaned up, and it becomes visible
    via `GET /recordings` and playable at `/clips/<filename>.mp4`.
@@ -219,7 +216,7 @@ skill). The scheduling loop wraps the compile call in `try`/`except` —
 letting an exception escape would silently kill the `asyncio.Task` forever,
 cancelling every future week until the next service restart.
 
-## Deploy in the LXC (Debian 12, no Docker)
+## Deploy in the LXC (Debian 13, no Docker)
 
 ```bash
 # as root in the CT

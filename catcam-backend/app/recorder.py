@@ -62,18 +62,41 @@ async def _record_clip(when: datetime) -> None:
         # the pre-roll
         await _record_clip_live_export(final_path, s.recording_seconds)
     else:
+        # segments are whole 5s chunks, so concatenating them raw would
+        # start the clip at the start of whichever segment happens to
+        # overlap splice_start — not necessarily `pre_roll_seconds` before
+        # `when`. Concat first, then trim the concatenated stream to the
+        # exact [splice_start, splice_end] window. -c copy can only cut on
+        # a keyframe, not an arbitrary frame, but at this encode's GOP
+        # size (50 @ ~27.5fps) that's ~1.8s accuracy — far tighter than
+        # the 5s segment boundary, with no re-encode cost.
+        first_stamp = datetime.strptime(segments[0].stem, buffer.FILENAME_FMT).replace(tzinfo=tz())
+        offset = max(0.0, (splice_start - first_stamp).total_seconds())
+        duration = s.pre_roll_seconds + s.post_roll_seconds
+
         list_path = recordings_dir() / f".{final_path.name}.txt"
+        concat_raw = recordings_dir() / f".{final_path.name}.raw.mp4"
         list_path.write_text("".join(f"file '{p.resolve()}'\n" for p in segments))
         try:
             proc = await asyncio.create_subprocess_exec(
                 "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_path),
-                "-c", "copy", "-movflags", "+faststart", str(final_path),
+                "-c", "copy", str(concat_raw),
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
             await proc.wait()
+            if concat_raw.exists():
+                proc = await asyncio.create_subprocess_exec(
+                    "ffmpeg", "-y", "-ss", str(offset), "-i", str(concat_raw),
+                    "-t", str(duration), "-c", "copy", "-movflags", "+faststart",
+                    str(final_path),
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await proc.wait()
         finally:
             list_path.unlink(missing_ok=True)
+            concat_raw.unlink(missing_ok=True)
 
     if not final_path.exists():
         return

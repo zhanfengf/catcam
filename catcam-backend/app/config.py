@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     buffer_dir: str = "./buffer"
     buffer_segment_seconds: int = 5
     buffer_window_seconds: int = 180
-    pre_roll_seconds: int = 3
+    pre_roll_seconds: int = 15
     post_roll_seconds: int = 45
 
     @property

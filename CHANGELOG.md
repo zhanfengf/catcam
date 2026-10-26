@@ -4,6 +4,14 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.9.0 — 24/7 pre-roll 緩衝,餵食片終於見到 Roll Roll 跑過去(2026-10-26)
+
+- `42b426f` Add precise keyframe-accurate trim to the pre-roll splice, tune the window——幫 pre-roll 拼接加多一步精準裁剪(`-ss`/`-t` 喺 concat 完嘅片度再裁一次,`-c copy` 唔轉碼),將原本「成個 5 秒 segment 粗粒度」嘅精度,提升到受限於 keyframe 間距(~1.8 秒)嘅水平。同時將 `pre_roll_seconds`/`post_roll_seconds` 由最初嘅 3/57 調校到 15/45(覆蓋返實測 ~15 秒嘅觸發偵測延遲),總長維持 60 秒
+- `0ada9ec` Document pre-roll vs 24/7 buffering distinction and the full splice pipeline——喺 README 補充「pre-roll 係目標、24/7 緩衝係唯一做得到嘅手段」嘅概念解釋,加埋對比表同線性時間軸圖,方便之後參考
+- `1b2b391` Add 24/7 pre-roll buffer so feed clips show the cat running over——新增 `app/buffer.py`,24/7 用 `-c copy` 由 go2rtc 嘅 RTSP 攞 `petkit_h264`,切做 5 秒一段嘅 rolling buffer;`recorder.py` 出糧觸發時由 buffer 拼返「觸發前 + 觸發後」嘅畫面,唔再淨係靠觸發後先開始錄(之前嘅做法無論幾快都影唔到貓跑過去,因為根本冧咗做咗嘅畫面冇得補錄)
+
+端對端驗證咗兩次:觸發出糧,片頭第一幀嘅燒入時間戳同「觸發時間 - pre_roll_seconds」計算出嚟嘅數值完全脗合(其中一次仲啱啱好對正咗真實撳制嗰一刻)。
+
 ## v0.8.0 — go2rtc VAAPI 硬件編碼 + 設定帶入版本控制(2026-10-26)
 
 - `de8cec7` Bring go2rtc.yaml/service under version control, starting with the VAAPI switch——`petkit_h264` stream 由 `ffmpeg:...#video=h264` 簡寫(內部用 `libx264` 軟件編碼)改做手寫 `exec:` 命令,用 `h264_vaapi` 經 CT 114 嘅 `/dev/dri/renderD128` 做硬件編碼,CPU 由 ~40% 跌到 ~15%(單核)。同時將 `go2rtc.yaml`/`go2rtc.service` 由「只喺 CT 114 度留 `.bak`、零 git history」帶入呢個 repo(`catcam-backend/deploy/go2rtc/`),之後改動都有真正 diff 可以睇
