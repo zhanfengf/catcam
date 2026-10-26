@@ -4,6 +4,10 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.13.3 — 公告彈窗 ✕ hover 加綠色正方形外框(2026-10-27)
+
+- `1039259` Add a green square hover frame to the announcement close button——公告彈窗嘅 ✕ 關閉掣,滑鼠移上去時外面加一個綠色正方形外框、✕ 本身都變綠(`--accent-strong`)。只針對 `.announcement-modal .modal-close`,唔影響其他 modal 共用嘅關閉掣;預設留咗一層透明 2px border,所以 hover 出框時唔會推移到個 ✕。純前端。
+
 ## v0.13.2 — 公告彈窗加大 2 倍 + 文字加大(2026-10-26)
 
 - `4230247` Enlarge the announcement popup ~2x with bigger text——公告彈窗同秘密通道嘅密碼 modal 共用 `.modal` 樣式,所以加咗一個 `.announcement-modal` 修飾 class,淨係放大公告呢個(`max-width` 340→640px、文字 14→23px、icon 同 ✕ 都放大),唔影響密碼 modal。純前端。
