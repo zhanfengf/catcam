@@ -1,5 +1,5 @@
 <script>
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, afterUpdate } from 'svelte';
   import '../app.css';
   import { getStatus, feed, adminFeed, adminFeedTest, adminSetAnnouncement, adminSetAutoFeed, adminHistory, getRecordings, getActivity } from '$lib/api.js';
   import { VideoRTC } from '$lib/video-rtc.js';
@@ -226,6 +226,18 @@
   let activityLoading = false;
   let activityError = false;
   let activityTimer;
+  let activityFeedEl;
+  let lastActivityCount = 0;
+
+  // chat-style feed: keep the newest line in view at the bottom. only scroll
+  // when the number of lines actually changes (a new feed/clip), not on every
+  // 15s status re-render — otherwise it'd fight a user scrolling up to read back
+  afterUpdate(() => {
+    if (activityFeedEl && activityLines.length !== lastActivityCount) {
+      activityFeedEl.scrollTop = activityFeedEl.scrollHeight;
+      lastActivityCount = activityLines.length;
+    }
+  });
 
   let secretTapCount = 0;
   let secretTapTimer;
@@ -346,7 +358,8 @@
 
   // two-phase: each event becomes a "fed" line at fed_at, plus — once its clip
   // exists — a separate "clip ready" line at clip_ready_at. flattened and
-  // sorted newest-first so the pair reads as two chat messages a minute apart
+  // sorted oldest-first (chat style) so each "餵咗 → 錄影好咗" pair reads top
+  // to bottom; the feed auto-scrolls to the newest at the bottom
   $: activityLines = (activity || [])
     .flatMap((e) => {
       // "錄影整緊…" only while the clip hasn't landed — once it has, the
@@ -357,7 +370,7 @@
       }
       return lines;
     })
-    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+    .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
 
   function formatRecordingTime(iso) {
     const d = new Date(iso);
@@ -662,7 +675,7 @@
       <div class="activity-head">
         <div class="activity-title">{t.activityTitle}</div>
       </div>
-      <div class="activity-feed">
+      <div class="activity-feed" bind:this={activityFeedEl}>
         {#if activityLoading && !activity}
           <p class="activity-state">{t.activityLoading}</p>
         {:else if activityError}
