@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import buffer, db, ha, highlights, recorder
+from . import autofeed, buffer, db, ha, highlights, recorder
 from .config import get_settings
 from .ratelimit import check_ip
 from .scheduling import build_status, day_start, now
@@ -25,7 +25,9 @@ async def lifespan(app: FastAPI):
     recorder.start()
     highlights.start()
     ha.start()
+    autofeed.start()
     yield
+    autofeed.stop()
     ha.stop()
     recorder.stop()
     highlights.stop()
@@ -76,6 +78,7 @@ async def status():
     body["fed_today"] = db.count_feeds_today(day_start(now()))
     body["ha_online"] = ha.is_online()
     body["announcement"] = db.get_announcement()
+    body["auto_feed_windows"] = db.get_auto_feed_windows()
     if not body["ha_online"]:
         # HA unreachable overrides the time/cooldown-based reason — no point
         # telling a visitor "try again in 5 min" when the feeder itself is
@@ -240,6 +243,43 @@ async def admin_set_announcement(request: Request):
     db.set_announcement(text, now())
 
     return {"ok": True, "announcement": text}
+
+
+@app.post("/admin/auto-feed")
+async def admin_set_auto_feed(request: Request):
+    ip = client_ip(request)
+
+    if not check_ip(ip):
+        return JSONResponse(
+            status_code=429,
+            content={"ok": False, "reason": "too_many_requests",
+                     "message": "撳得太密啦，唞一唞先"},
+        )
+
+    timestamp = request.headers.get("x-admin-timestamp", "")
+    signature = request.headers.get("x-admin-signature", "")
+    if not verify_admin_signature("POST", "/admin/auto-feed", timestamp, signature):
+        return JSONResponse(
+            status_code=403,
+            content={"ok": False, "reason": "unauthorized",
+                     "message": "密碼唔啱或者已過期"},
+        )
+
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    raw = body.get("windows")
+    windows: list[str] = []
+    for w in raw if isinstance(raw, list) else []:
+        w = str(w).strip()
+        if w and autofeed.parse_window(w) and w not in windows:
+            windows.append(w)
+        if len(windows) >= 10:
+            break
+    db.set_auto_feed_windows(windows)
+
+    return {"ok": True, "auto_feed_windows": windows}
 
 
 @app.get("/admin/history")

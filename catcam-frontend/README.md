@@ -9,7 +9,7 @@ go2rtc 嘅直播串流。
 觀眾 → cat.kelvinp.work → Caddy(:80, CT 114)
         ├─ /                                                      → 靜態 SvelteKit build
         ├─ /status /feed /admin/feed /admin/feed-test /admin/announcement
-        │  /admin/history /recordings /activity                     → reverse_proxy 127.0.0.1:8080（FastAPI 後端）
+        │  /admin/auto-feed /admin/history /recordings /activity    → reverse_proxy 127.0.0.1:8080（FastAPI 後端）
         ├─ /clips/*                                                → 靜態檔（FastAPI 寫落去嘅 60 秒餵食片，唔經後端）
         └─ /camera/*                                                → reverse_proxy 127.0.0.1:1984（go2rtc，rewrite 做 /api/*）
 ```
@@ -44,6 +44,11 @@ WebSocket + MSE 經 `/camera/ws?src=petkit_h264` 重新 serve 出嚟。前端
   兩個都唔計落「訪客餵食咗」。
 - `POST /admin/announcement`（📢 公告欄）：一個 textarea + 儲存掣,設定/清空
   訪客一入站就見到嘅公告彈窗文字（留空即隱藏）。
+- `POST /admin/auto-feed`（🤖 自動餵食時段）：一個 textarea,每行一個
+  `HH:MM-HH:MM` 安全網時段。每個時段完結時,如果期間冇任何人餵過（網站 / App /
+  機身掣都算）就自動餵一份,並喺餵食動態出一條 🤖 系統訊息；自動餵會開始 120
+  分鐘公眾冷卻,但唔計落「訪客餵食咗」。後端會過濾/正規化格式,存錯格式嘅行會
+  被丟棄,save 完 textarea 會反映返伺服器接受咗嘅清單。
 - `GET /admin/history`：顯示今日 PetKit 裝置本身偵測到嘅每次出糧時間
   （唔係呢個網站自己嘅紀錄——網站觸發嘅餵食最終都會出現喺呢度，所以冇需要
   分開顯示兩份清單）。紀錄標題有個手動重新整理掣，因為 PetKit 雲端同步仍然
@@ -77,7 +82,10 @@ Token 存喺 `localStorage`，唔會傳明文密碼。
 嘅兩句對話。未有 `clip` 嗰陣先顯示「錄影整緊…」同唔畀撳；一有 `clip` 就淨低
 可撳嗰條帶 link。每 30 秒 poll 一次（錄影本身都要成分鐘先 render 好，唔使更
 密）。因為係行 `times_dispensed` 信號，連 PetKit app、機身掣、自動餵都影得到，
-唔止網站觸發嘅餵食。`feed_event` 由後端重啟嗰刻先開始記，之前嘅餵食唔會追溯。
+唔止網站觸發嘅餵食。如果某個事件係排程**自動餵食**（後端標 `source: "auto"`、
+`note` 係對應時段），個「餵咗」行就會換成 🤖「冇人喺 07:00-07:30 餵 Roll Roll，
+自動餵咗一份乾糧。下次可以餵：120 分鐘後」，之後一樣有「📹 錄影好咗」嗰條。
+`feed_event` 由後端重啟嗰刻先開始記，之前嘅餵食唔會追溯。
 
 ## 資料卡（ⓘ）
 
@@ -135,8 +143,8 @@ ssh root@upsn150-pve "
 部署去 CT 114 先生效** —— 之前試過淨係改本地 repo 冇 push,新 endpoint
 response 靜默跌去 SPA fallback，攞住 HTML 當 JSON parse，前端顯示完全
 唔相關嘅錯誤）已經設定好 `/` serve 靜態 build、`/status /feed /health
-/admin/feed /admin/feed-test /admin/announcement /admin/history
-/recordings /activity` 代理去後端、`/clips/*` 直接 serve 後端寫落 CT 本機嘅餵食片、
+/admin/feed /admin/feed-test /admin/announcement /admin/auto-feed
+/admin/history /recordings /activity` 代理去後端、`/clips/*` 直接 serve 後端寫落 CT 本機嘅餵食片、
 `/camera/*` 代理去 go2rtc。CT 入面要裝 Caddy(見官方 apt repo 說明)同
 go2rtc,並喺 Cloudflare Tunnel 加一條 route:`cat.kelvinp.work` →
 `http://<CT IP>:80`。新增任何一個 `/admin/*` endpoint,呢度嘅路由清單都要

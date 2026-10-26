@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import '../app.css';
-  import { getStatus, feed, adminFeed, adminFeedTest, adminSetAnnouncement, adminHistory, getRecordings, getActivity } from '$lib/api.js';
+  import { getStatus, feed, adminFeed, adminFeedTest, adminSetAnnouncement, adminSetAutoFeed, adminHistory, getRecordings, getActivity } from '$lib/api.js';
   import { VideoRTC } from '$lib/video-rtc.js';
 
   const ADMIN_TOKEN_KEY = 'catcam_admin_token';
@@ -56,6 +56,14 @@
       announcementSaved: '公告已更新！📢',
       announcementSaveFail: '儲存失敗',
       announcementBtnLabel: '睇公告',
+      autoFeedSectionTitle: '🤖 自動餵食時段',
+      autoFeedHint: '每行一個時段 HH:MM-HH:MM。時段完結時如果冇人餵過，就自動餵一份。',
+      autoFeedPlaceholder: '例如：\n07:00-07:30\n18:00-18:30',
+      autoFeedSaveBtn: '儲存時段',
+      autoFeedSaving: '儲存緊…',
+      autoFeedSaved: '自動餵食時段已更新！🤖',
+      autoFeedSaveFail: '儲存失敗',
+      activityAutoMsg: (w, min) => `🤖 冇人喺 ${w} 餵 Roll Roll，自動餵咗一份乾糧。下次可以餵：${min} 分鐘後`,
       wrongPwFallback: '密碼唔啱或者已過期',
       adminLockBtn: '🔒 鎖返',
       refreshLabel: '重新整理鏡頭',
@@ -127,6 +135,14 @@
       announcementSaved: 'Announcement updated! 📢',
       announcementSaveFail: 'Save failed',
       announcementBtnLabel: 'View announcement',
+      autoFeedSectionTitle: '🤖 Auto-feed windows',
+      autoFeedHint: 'One window per line, HH:MM-HH:MM. If no one feeds during a window, the cat is auto-fed when it ends.',
+      autoFeedPlaceholder: 'e.g.\n07:00-07:30\n18:00-18:30',
+      autoFeedSaveBtn: 'Save windows',
+      autoFeedSaving: 'Saving…',
+      autoFeedSaved: 'Auto-feed windows updated! 🤖',
+      autoFeedSaveFail: 'Save failed',
+      activityAutoMsg: (w, min) => `🤖 No one fed Roll Roll during ${w}, auto-fed a portion. Next feed in ${min} min`,
       wrongPwFallback: 'Wrong password or expired',
       adminLockBtn: '🔒 Lock',
       refreshLabel: 'Refresh camera',
@@ -226,6 +242,8 @@
   let showAnnouncement = false;
   let announcementDraft = null;
   let savingAnnouncement = false;
+  let autoFeedDraft = null;
+  let savingAutoFeed = false;
 
   async function refresh() {
     try {
@@ -333,7 +351,7 @@
     .flatMap((e) => {
       // "錄影整緊…" only while the clip hasn't landed — once it has, the
       // separate "clip ready" line carries the link and the fed line is plain
-      const lines = [{ kind: 'fed', at: e.fed_at, pending: !e.clip }];
+      const lines = [{ kind: 'fed', at: e.fed_at, pending: !e.clip, source: e.source, note: e.note }];
       if (e.clip) {
         lines.push({ kind: 'clip', at: e.clip_ready_at || e.fed_at, clip: e.clip });
       }
@@ -379,6 +397,7 @@
     showToast('ok', t.lockedToast);
     history = null;
     announcementDraft = null;
+    autoFeedDraft = null;
   }
 
   function formatPetkitTime(ts) {
@@ -465,6 +484,11 @@
     announcementDraft = status.announcement ?? '';
   }
 
+  // one-time prefill of the auto-feed windows textarea (same guard as above)
+  $: if (adminToken && status && autoFeedDraft === null) {
+    autoFeedDraft = (status.auto_feed_windows ?? []).join('\n');
+  }
+
   async function onSaveAnnouncement() {
     if (savingAnnouncement || !adminToken) return;
     savingAnnouncement = true;
@@ -474,6 +498,28 @@
       showToast('ok', t.announcementSaved);
     } else {
       showToast('err', data.message || t.announcementSaveFail);
+      if (data.reason === 'unauthorized') {
+        lockAdmin();
+      }
+    }
+    await refresh();
+  }
+
+  async function onSaveAutoFeed() {
+    if (savingAutoFeed || !adminToken) return;
+    savingAutoFeed = true;
+    const windows = (autoFeedDraft ?? '')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const { httpOk, data } = await adminSetAutoFeed(adminToken, windows);
+    savingAutoFeed = false;
+    if (httpOk && data.ok) {
+      // reflect the server's validated/normalised list back into the textarea
+      autoFeedDraft = (data.auto_feed_windows ?? []).join('\n');
+      showToast('ok', t.autoFeedSaved);
+    } else {
+      showToast('err', data.message || t.autoFeedSaveFail);
       if (data.reason === 'unauthorized') {
         lockAdmin();
       }
@@ -642,7 +688,11 @@
                   <span class="activity-who">{t.activitySystem}</span>
                 </div>
                 <div class="activity-item-body">
-                  {t.activityFedMsg}
+                  {#if line.source === 'auto' && line.note}
+                    {t.activityAutoMsg(line.note, status?.cooldown_minutes ?? 120)}
+                  {:else}
+                    {t.activityFedMsg}
+                  {/if}
                   {#if line.pending}<span class="activity-pending">{t.activityFedPending}</span>{/if}
                 </div>
               </div>
@@ -680,6 +730,22 @@
         ></textarea>
         <button class="admin-btn" disabled={savingAnnouncement} on:click={onSaveAnnouncement}>
           {savingAnnouncement ? t.announcementSaving : t.announcementSaveBtn}
+        </button>
+      </div>
+
+      <div class="history">
+        <div class="history-head">
+          <div class="history-title">{t.autoFeedSectionTitle}</div>
+        </div>
+        <p class="history-note">{t.autoFeedHint}</p>
+        <textarea
+          class="announcement-input"
+          placeholder={t.autoFeedPlaceholder}
+          bind:value={autoFeedDraft}
+          rows="3"
+        ></textarea>
+        <button class="admin-btn" disabled={savingAutoFeed} on:click={onSaveAutoFeed}>
+          {savingAutoFeed ? t.autoFeedSaving : t.autoFeedSaveBtn}
         </button>
       </div>
 

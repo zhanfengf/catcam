@@ -189,8 +189,15 @@ async def _poll_loop() -> None:
             if last_val is not None and val > last_val:
                 when = datetime.now(tz())
                 # phase 1 of the activity feed: log "fed" immediately so the
-                # site can show it ~1 min before the clip finishes rendering
-                db.add_feed_event(when)
+                # site can show it ~1 min before the clip finishes rendering.
+                # if the scheduler just dispensed (marker set <90s ago), tag
+                # this event as that auto-feed so the feed shows the 🤖 line
+                auto_window = db.pop_auto_feed_pending(when, 90)
+                db.add_feed_event(
+                    when,
+                    source="auto" if auto_window else "visitor",
+                    note=auto_window,
+                )
                 asyncio.create_task(_record_clip(when))
             last_val = val
 

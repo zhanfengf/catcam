@@ -26,11 +26,12 @@ service — the Home Assistant token stays here, never in the browser.
 
 | Method | Path             | Purpose                                                |
 | ------ | ---------------- | ------------------------------------------------------- |
-| GET    | `/status`             | Can we feed now? next feed time, window, visitor fed-today count, `ha_online`, `announcement`. |
+| GET    | `/status`             | Can we feed now? next feed time, window, visitor fed-today count, `ha_online`, `announcement`, `auto_feed_windows`. |
 | POST   | `/feed`               | Try to feed. Enforces all rules, then calls HA.          |
 | POST   | `/admin/feed`         | HMAC-signed bypass (cooldown + open hours) for the owner only. |
 | POST   | `/admin/feed-test`    | HMAC-signed. Dispenses for real (tests the pipeline end to end) but excluded from the public cooldown and the "訪客餵食咗" count. |
 | POST   | `/admin/announcement` | HMAC-signed. Sets (or clears, with `""`) the announcement banner text. |
+| POST   | `/admin/auto-feed`    | HMAC-signed. Sets the list of `HH:MM-HH:MM` auto-feed safety-net windows. |
 | GET    | `/admin/history`      | HMAC-signed. Today's feed events, straight from PetKit (not our own log). |
 | GET    | `/recordings`         | Public. List of this week's 60s feed clips (filename + timestamp). |
 | GET    | `/activity`           | Public. Today's feed events for the two-phase activity feed (`fed_at` + `clip` + `clip_ready_at`). |
@@ -291,6 +292,38 @@ clips in `_cleanup_old()` (`recording_retention_days`). This is deliberately
 (site feeds only, no clip info), `feed_event` backs the public activity feed
 (all dispenses, with clips) — two tables, two jobs, not one row stretched over
 both.
+
+## Auto-feed windows (safety net)
+
+`app/autofeed.py` is a background scheduler (checks every 60s) that makes sure
+Roll Roll doesn't go unfed if no visitor shows up. The owner configures a list
+of `HH:MM-HH:MM` windows via `POST /admin/auto-feed` (stored in `state` key
+`auto_feed_windows`, also returned in `/status` so the admin panel can prefill);
+each window, **if nobody fed the cat during it**, triggers one auto-feed when it
+closes.
+
+Per window, once its end time has passed today and it hasn't been handled yet:
+- If `has_feed_in_window()` finds any `feed_event` in `[start, end]` (any
+  trigger — site, PetKit app, physical button), it's marked handled, no feed.
+- Else, within a `_GRACE_MINUTES` (60) grace after the end (so a service that
+  was down through the window doesn't feed hours late), it dispenses: sets a
+  `state.auto_feed_pending` marker, calls `ha.dispense()`, and records the feed
+  via `record_feed(..., "auto:system", source="auto")`. Past the grace it's just
+  marked handled without feeding.
+
+`auto_feed_handled` (`state`, a `{window: "YYYY-MM-DD"}` map) is persisted so a
+restart never re-fires a window already handled today. The auto-feed **does**
+advance the public cooldown (`record_feed` now advances `last_fed_at` for every
+source except `admin`), matching the "下次可以餵：120 分鐘後" message, and is
+tagged `auto:` in `feed_log` so it's excluded from the "訪客餵食咗" count.
+
+The `feed_event` row for an auto-feed is created by the **recorder** (the sole
+feed_event writer), not the scheduler: when the recorder's poller detects the
+dispense, it calls `pop_auto_feed_pending()` and, if the marker is fresh (<90s),
+tags that event `source="auto"` with the window in `note`. The frontend renders
+those as the 🤖 "冇人喺 …餵…自動餵咗" line (still two-phase — the clip-ready line
+follows). This keeps one event per real dispense (no duplicate) while still
+giving the auto-feed both its special message and a clip.
 
 ## Deploy in the LXC (Debian 13, no Docker)
 
