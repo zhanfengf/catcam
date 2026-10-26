@@ -1495,11 +1495,14 @@
     line-height: 1;
     border: 2px solid transparent;
     border-radius: 6px;
-    transition: color 0.12s ease, border-color 0.12s ease;
+    transition: color 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
   }
   .announcement-modal .modal-close:hover {
     color: var(--accent-strong);
     border-color: var(--accent-strong);
+    /* Lattice `button-ghost` hover — emerald at 10% (primary-wash), same as
+       the Instagram handle chip */
+    background: rgba(6, 201, 136, 0.1);
   }
   .announcement-modal .announcement-text {
     font-size: 23px;
