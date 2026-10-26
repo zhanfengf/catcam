@@ -55,6 +55,7 @@
       announcementSaving: '儲存緊…',
       announcementSaved: '公告已更新！📢',
       announcementSaveFail: '儲存失敗',
+      announcementBtnLabel: '睇公告',
       wrongPwFallback: '密碼唔啱或者已過期',
       adminLockBtn: '🔒 鎖返',
       refreshLabel: '重新整理鏡頭',
@@ -116,6 +117,7 @@
       announcementSaving: 'Saving…',
       announcementSaved: 'Announcement updated! 📢',
       announcementSaveFail: 'Save failed',
+      announcementBtnLabel: 'View announcement',
       wrongPwFallback: 'Wrong password or expired',
       adminLockBtn: '🔒 Lock',
       refreshLabel: 'Refresh camera',
@@ -398,6 +400,10 @@
     showAnnouncement = false;
   }
 
+  function openAnnouncement() {
+    if (status?.announcement) showAnnouncement = true;
+  }
+
   // one-time prefill when the admin panel first has both a token and a
   // loaded status — not a plain assignment on every status poll, which
   // would wipe out whatever the admin is mid-typing every 15s
@@ -502,6 +508,15 @@
       </div>
     </div>
     <div class="header-right">
+      {#if status?.announcement}
+        <button class="announcement-btn" on:click={openAnnouncement} aria-label={t.announcementBtnLabel}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" />
+            <path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14" />
+            <path d="M8 6v8" />
+          </svg>
+        </button>
+      {/if}
       <div class="lang-toggle">
         <button class:active={lang === 'zh'} on:click={() => setLang('zh')}>繁中</button>
         <button class:active={lang === 'en'} on:click={() => setLang('en')}>EN</button>
@@ -821,7 +836,7 @@
     color: var(--text-dim);
     font-size: 15px;
     line-height: 1;
-    cursor: pointer;
+    cursor: var(--cursor-pointer);
     padding: 2px;
   }
 
@@ -829,6 +844,23 @@
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+  .announcement-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--bg-soft);
+    color: var(--text-dim);
+    cursor: var(--cursor-pointer);
+  }
+  .announcement-btn svg {
+    width: 16px;
+    height: 16px;
   }
   .lang-toggle {
     display: flex;
@@ -843,7 +875,7 @@
     font-size: 12px;
     font-weight: 600;
     padding: 6px 10px;
-    cursor: pointer;
+    cursor: var(--cursor-pointer);
   }
   .lang-toggle button.active {
     background: var(--mint);
@@ -914,7 +946,7 @@
     color: #fff;
     font-size: 22px;
     line-height: 1;
-    cursor: pointer;
+    cursor: var(--cursor-pointer);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -954,7 +986,7 @@
     color: var(--mint);
     background: linear-gradient(180deg, var(--accent) 0%, var(--accent-strong) 100%);
     border: none;
-    cursor: pointer;
+    cursor: var(--cursor-pointer);
   }
   .stage-feed-btn.ready:active {
     transform: translateY(2px);
@@ -1054,7 +1086,7 @@
     background: var(--gradient-teal-orange);
     border: none;
     border-radius: 12px;
-    cursor: pointer;
+    cursor: var(--cursor-pointer);
   }
   .admin-btn:disabled {
     opacity: 0.6;
@@ -1065,7 +1097,7 @@
     border: none;
     color: var(--text-dim);
     font-size: 12px;
-    cursor: pointer;
+    cursor: var(--cursor-pointer);
     padding: 4px;
   }
   .history {
@@ -1091,7 +1123,7 @@
     color: var(--text-dim);
     font-size: 15px;
     line-height: 1;
-    cursor: pointer;
+    cursor: var(--cursor-pointer);
     padding: 2px 4px;
   }
   .history-refresh:disabled {
@@ -1158,7 +1190,7 @@
     border: none;
     color: var(--text-dim);
     font-size: 16px;
-    cursor: pointer;
+    cursor: var(--cursor-pointer);
   }
   .modal-icon {
     width: 56px;
@@ -1200,7 +1232,7 @@
     font-weight: 700;
     color: #fff;
     background: var(--gradient-teal-orange);
-    cursor: pointer;
+    cursor: var(--cursor-pointer);
   }
   .announcement-text {
     margin: 0;
@@ -1369,7 +1401,7 @@
     border: 1px solid var(--line);
     border-radius: 14px;
     background: var(--bg);
-    cursor: pointer;
+    cursor: var(--cursor-pointer);
     transition: border-color 0.15s ease, background-color 0.15s ease;
   }
   .info-row:hover {
@@ -1425,7 +1457,7 @@
     border-bottom: 1px solid var(--line);
   }
   .recordings-table tbody tr {
-    cursor: pointer;
+    cursor: var(--cursor-pointer);
   }
   .recordings-table tbody tr:last-child td {
     border-bottom: none;
