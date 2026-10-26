@@ -67,8 +67,6 @@
       wrongPwFallback: '密碼唔啱或者已過期',
       adminLockBtn: '🔒 鎖返',
       refreshLabel: '重新整理鏡頭',
-      fullscreenLabel: '全螢幕',
-      pipLabel: '子母畫面',
       durH: (h, m) => `${h} 小時 ${m} 分鐘`,
       durM: (m, s) => `${m} 分 ${s} 秒`,
       durS: (s) => `${s} 秒`,
@@ -148,8 +146,6 @@
       wrongPwFallback: 'Wrong password or expired',
       adminLockBtn: '🔒 Lock',
       refreshLabel: 'Refresh camera',
-      fullscreenLabel: 'Fullscreen',
-      pipLabel: 'Picture in picture',
       durH: (h, m) => `${h}h ${m}m`,
       durM: (m, s) => `${m}m ${s}s`,
       durS: (s) => `${s}s`,
@@ -210,12 +206,12 @@
 
     oninit() {
       super.oninit();
-      // a live MSE stream has no real timeline, so the browser's native video
-      // controls (scrubber + mute/fullscreen/⋮) just flicker and reset on hover,
-      // looking like the stream keeps reloading. VideoRTC's own oninit sets
-      // controls=true; flip it off here, after super runs. oninit only fires
-      // once on connectedCallback, so this survives ws reconnects.
-      this.video.controls = false;
+      // keep the native controls (play/pause, mute, fullscreen, PiP via ⋮) —
+      // just tag the video so app.css can hide the one bad part, the timeline
+      // scrubber: a live MSE stream has no real timeline, so that bar flickers
+      // and resets on hover, looking like the stream keeps reloading. oninit
+      // fires once on connectedCallback, so the class survives ws reconnects.
+      this.video.classList.add('live-cam');
     }
   }
 
@@ -591,33 +587,6 @@
     initCamera();
   }
 
-  // custom fullscreen + PiP buttons — the native <video> controls stay off
-  // (their live-stream scrubber just flickers), so these replace the two
-  // controls worth keeping
-  function toggleFullscreen() {
-    const el = videoRtcEl?.video;
-    if (!el) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen?.();
-    } else {
-      (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el);
-    }
-  }
-
-  async function togglePiP() {
-    const el = videoRtcEl?.video;
-    if (!el) return;
-    try {
-      if (document.pictureInPictureElement) {
-        await document.exitPictureInPicture();
-      } else {
-        await el.requestPictureInPicture?.();
-      }
-    } catch (e) {
-      // PiP can reject (not ready / unsupported) — nothing to do
-    }
-  }
-
   function checkCameraConnection() {
     cameraConnected = videoRtcEl?.wsState === WebSocket.OPEN;
   }
@@ -691,23 +660,7 @@
     <div class="live-main">
       <section class="stage">
         <video-rtc class="stage-cam" bind:this={videoRtcEl}></video-rtc>
-        <div class="stage-btns">
-          <button class="stage-btn" on:click={togglePiP} aria-label={t.pipLabel}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 9V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4" />
-              <rect width="10" height="7" x="12" y="13" rx="2" />
-            </svg>
-          </button>
-          <button class="stage-btn" on:click={toggleFullscreen} aria-label={t.fullscreenLabel}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M8 3H5a2 2 0 0 0-2 2v3" />
-              <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
-              <path d="M3 16v3a2 2 0 0 0 2 2h3" />
-              <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
-            </svg>
-          </button>
-          <button class="stage-btn stage-btn-refresh" on:click={refreshCamera} aria-label={t.refreshLabel}>↻</button>
-        </div>
+        <button class="stage-refresh" on:click={refreshCamera} aria-label={t.refreshLabel}>↻</button>
         <div class="stage-watermark">cat.kelvinp.work</div>
         <button
           class="stage-feed-btn"
@@ -1178,14 +1131,10 @@
     height: 100%;
     object-fit: cover;
   }
-  .stage-btns {
+  .stage-refresh {
     position: absolute;
     top: 10px;
     right: 10px;
-    display: flex;
-    gap: 8px;
-  }
-  .stage-btn {
     width: 44px;
     height: 44px;
     border-radius: 50%;
@@ -1198,10 +1147,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-  .stage-btn svg {
-    width: 20px;
-    height: 20px;
   }
   .stage-watermark {
     position: absolute;

@@ -58,3 +58,15 @@ button {
   color: var(--accent);
   cursor: var(--cursor-pointer);
 }
+
+/* live stream: keep the native <video> controls (play/pause, time, mute,
+   fullscreen, PiP via ⋮) but hide the one useless part — the timeline
+   scrubber. A live MSE stream has no real duration, so that bar just
+   flickers/resets on hover and looks like the stream keeps reloading. Scoped
+   to .live-cam (added to the stage video in +page.svelte) so the recordings
+   lightbox player keeps its working scrubber. This lives in global app.css,
+   not Svelte scoped styles, because scoped :global on a ::-webkit pseudo-
+   element didn't take. */
+video.live-cam::-webkit-media-controls-timeline {
+  display: none !important;
+}
