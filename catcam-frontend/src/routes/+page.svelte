@@ -935,13 +935,27 @@
     letter-spacing: 0.5px;
   }
   .info-btn {
-    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    /* Lattice button-ghost: bare icon button, 2px transparent border reserved
+       so the emerald hover frame appears without shifting the glyph */
+    border: 2px solid transparent;
+    border-radius: 6px;
     background: none;
     color: var(--text-dim);
     font-size: 15px;
     line-height: 1;
     cursor: var(--cursor-pointer);
-    padding: 2px;
+    transition: color 0.12s ease, border-color 0.12s ease, background-color 0.12s ease;
+  }
+  .info-btn:hover {
+    color: var(--accent-strong);
+    border-color: var(--accent-strong);
+    background: rgba(6, 201, 136, 0.1);
   }
 
   .header-right {
