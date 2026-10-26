@@ -4,6 +4,10 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.13.2 — 公告彈窗加大 2 倍 + 文字加大(2026-10-26)
+
+- `4230247` Enlarge the announcement popup ~2x with bigger text——公告彈窗同秘密通道嘅密碼 modal 共用 `.modal` 樣式,所以加咗一個 `.announcement-modal` 修飾 class,淨係放大公告呢個(`max-width` 340→640px、文字 14→23px、icon 同 ✕ 都放大),唔影響密碼 modal。純前端。
+
 ## v0.13.1 — 電腦版直播佈滿畫面,刪走動態欄副標題(2026-10-26)
 
 - `8022900` Make the live view fill the desktop viewport, drop the activity subtitle——電腦版(≥1100px)直播畫面由原本置中封頂 1550px 改做佈滿成個視窗闊度(`main` 嘅 `max-width` 由 1550px 改做 `none`),同時俾 `.stage` 加咗 `max-height: calc(100vh - 160px)`,確保闊畫面喺矮視窗都唔會 overflow(video 本身 `object-fit:cover`,係裁切而唔係變形)。手機版維持動態欄疊喺直播下面。順手刪走「餵食動態」標題下面嗰句「每次餵 Roll Roll 都會自動留低一條 60 秒錄影」副標題。純前端 CSS/markup,冇郁後端同 Caddy。
