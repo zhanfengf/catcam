@@ -70,7 +70,12 @@ there:
 `app/recorder.py` runs a background poller (every 10s, same
 `times_dispensed` signal as `/admin/history`) and on every real dispense
 fires `GET http://127.0.0.1:1984/api/stream.mp4?src=petkit_h264&duration=60`
-against go2rtc — it exports a fixed-length clip natively, no separate
+against go2rtc. **Not tied to `/feed` or `/admin/feed` specifically** — it
+watches the HA dispense counter itself, so it fires on *any* real dispense:
+a visitor pressing the site's button, the owner's admin bypass, the PetKit
+app, the physical button on the feeder, or PetKit's own schedule. If `/feed`
+fails before HA actually dispenses (e.g. `502`), no clip is recorded, since
+the counter never moved — it exports a fixed-length clip natively, no separate
 ffmpeg-recording logic needed for the capture itself. Saved to
 `recordings_dir` (default `./recordings`), 7-day rolling retention (oldest
 deleted whenever a new clip lands), served publicly — no auth — via
