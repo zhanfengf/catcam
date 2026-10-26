@@ -8,8 +8,8 @@ go2rtc 嘅直播串流。
 ```
 觀眾 → cat.kelvinp.work → Caddy(:80, CT 114)
         ├─ /                                                      → 靜態 SvelteKit build
-        ├─ /status /feed /admin/feed /admin/feed-test
-        │  /admin/announcement /admin/history /recordings          → reverse_proxy 127.0.0.1:8080（FastAPI 後端）
+        ├─ /status /feed /admin/feed /admin/feed-test /admin/announcement
+        │  /admin/history /recordings /activity                     → reverse_proxy 127.0.0.1:8080（FastAPI 後端）
         ├─ /clips/*                                                → 靜態檔（FastAPI 寫落去嘅 60 秒餵食片，唔經後端）
         └─ /camera/*                                                → reverse_proxy 127.0.0.1:1984（go2rtc，rewrite 做 /api/*）
 ```
@@ -63,6 +63,21 @@ Token 存喺 `localStorage`，唔會傳明文密碼。
 **嗰句實際文字**(唔係單純一個 boolean)存入 `localStorage`
 (`catcam_announcement_dismissed`),所以如果之後公告內容改咗,訪客會再見到
 新彈窗——唔會因為之前撳過「關閉」就永遠見唔返。
+
+## 餵食動態欄（兩段式）
+
+直播畫面右邊一欄「餵食動態」（闊芒 ≥1100px 並排，窄芒疊喺畫面下面），唯讀，
+資料來自 `GET /activity`。每一次真實出糧會出**兩條**訊息：先喺偵測到嗰刻出
+「🍚 餵咗 Roll Roll 錄影整緊…」，約一分鐘後錄影整好再出「📹 錄影好咗，睇返
+錄影 ›」（撳得，用返同資料卡一樣嘅 `/clips/<filename>.mp4` lightbox 播放器）。
+
+前端攞到 `events`（每個係 `{fed_at, clip, clip_ready_at}`）之後，用
+`activityLines` 把每個事件展開成兩行——`fed_at` 出「餵咗」行、有 `clip` 先
+多出一行「錄影好咗」——再按時間新到舊排，所以一對訊息讀起上嚟就似相隔一分鐘
+嘅兩句對話。未有 `clip` 嗰陣先顯示「錄影整緊…」同唔畀撳；一有 `clip` 就淨低
+可撳嗰條帶 link。每 30 秒 poll 一次（錄影本身都要成分鐘先 render 好，唔使更
+密）。因為係行 `times_dispensed` 信號，連 PetKit app、機身掣、自動餵都影得到，
+唔止網站觸發嘅餵食。`feed_event` 由後端重啟嗰刻先開始記，之前嘅餵食唔會追溯。
 
 ## 資料卡（ⓘ）
 
@@ -121,7 +136,7 @@ ssh root@upsn150-pve "
 response 靜默跌去 SPA fallback，攞住 HTML 當 JSON parse，前端顯示完全
 唔相關嘅錯誤）已經設定好 `/` serve 靜態 build、`/status /feed /health
 /admin/feed /admin/feed-test /admin/announcement /admin/history
-/recordings` 代理去後端、`/clips/*` 直接 serve 後端寫落 CT 本機嘅餵食片、
+/recordings /activity` 代理去後端、`/clips/*` 直接 serve 後端寫落 CT 本機嘅餵食片、
 `/camera/*` 代理去 go2rtc。CT 入面要裝 Caddy(見官方 apt repo 說明)同
 go2rtc,並喺 Cloudflare Tunnel 加一條 route:`cat.kelvinp.work` →
 `http://<CT IP>:80`。新增任何一個 `/admin/*` endpoint,呢度嘅路由清單都要

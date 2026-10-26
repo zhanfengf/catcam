@@ -5,7 +5,7 @@ from pathlib import Path
 
 import httpx
 
-from . import buffer
+from . import buffer, db
 from .config import get_settings
 from .scheduling import tz
 
@@ -106,6 +106,9 @@ async def _record_clip(when: datetime) -> None:
         logger.warning("recorder: no clip produced for trigger at %s", when)
         return
 
+    # phase 2 of the activity feed — attach the finished clip to the "fed"
+    # event already logged at detection time in _poll_loop
+    db.set_feed_event_clip(when, final_path.name, datetime.now(tz()))
     _cleanup_old()
 
 
@@ -144,6 +147,7 @@ async def _record_clip_live_export(final_path: Path, seconds: int) -> None:
 
 def _cleanup_old() -> None:
     cutoff = datetime.now(tz()) - timedelta(days=get_settings().recording_retention_days)
+    db.prune_feed_events(cutoff)
     for f in recordings_dir().glob("*.mp4"):
         try:
             stamp = datetime.strptime(f.stem, FILENAME_FMT).replace(tzinfo=tz())
@@ -183,7 +187,11 @@ async def _poll_loop() -> None:
             if val is None:
                 continue
             if last_val is not None and val > last_val:
-                asyncio.create_task(_record_clip(datetime.now(tz())))
+                when = datetime.now(tz())
+                # phase 1 of the activity feed: log "fed" immediately so the
+                # site can show it ~1 min before the clip finishes rendering
+                db.add_feed_event(when)
+                asyncio.create_task(_record_clip(when))
             last_val = val
 
 

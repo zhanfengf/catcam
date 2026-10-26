@@ -271,6 +271,15 @@ async def admin_history(request: Request):
     return {"ok": True, "petkit_log": petkit_log}
 
 
+@app.get("/activity")
+async def activity():
+    # today's feed events for the public two-phase activity feed: each row is
+    # a real dispense with `clip` NULL until its recording finishes ~1 min
+    # later. the frontend expands each into a "fed" line (at fed_at) and, once
+    # present, a "clip ready" line (at clip_ready_at)
+    return {"ok": True, "events": db.get_feed_events(day_start(now()))}
+
+
 @app.get("/recordings")
 async def recordings():
     return {"ok": True, "recordings": recorder.list_recordings()}

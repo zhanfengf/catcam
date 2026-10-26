@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import '../app.css';
-  import { getStatus, feed, adminFeed, adminFeedTest, adminSetAnnouncement, adminHistory, getRecordings } from '$lib/api.js';
+  import { getStatus, feed, adminFeed, adminFeedTest, adminSetAnnouncement, adminHistory, getRecordings, getActivity } from '$lib/api.js';
   import { VideoRTC } from '$lib/video-rtc.js';
 
   const ADMIN_TOKEN_KEY = 'catcam_admin_token';
@@ -82,7 +82,17 @@
       recordingsLoading: '載入緊…',
       recordingsEmpty: '暫時冇錄影',
       recordingsError: '攞唔到錄影',
-      recordingsColTime: '時間'
+      recordingsColTime: '時間',
+      activityTitle: '餵食動態',
+      activitySub: '每次餵 Roll Roll 都會自動留低一條 60 秒錄影',
+      activitySystem: '系統 / system',
+      activityFedMsg: '🍚 啱啱餵咗 Roll Roll',
+      activityFedPending: '錄影整緊…',
+      activityClipMsg: '📹 錄影好咗',
+      activityWatch: '睇返錄影',
+      activityLoading: '載入緊…',
+      activityEmpty: '暫時仲未有餵食紀錄',
+      activityError: '攞唔到動態'
     },
     en: {
       title: 'Roll Roll Live',
@@ -144,7 +154,17 @@
       recordingsLoading: 'Loading…',
       recordingsEmpty: 'No clips yet',
       recordingsError: "Couldn't load clips",
-      recordingsColTime: 'Time'
+      recordingsColTime: 'Time',
+      activityTitle: 'Feeding Activity',
+      activitySub: 'Every feed auto-saves a 60-second clip',
+      activitySystem: 'system',
+      activityFedMsg: '🍚 Just fed Roll Roll',
+      activityFedPending: 'clip rendering…',
+      activityClipMsg: '📹 Clip ready',
+      activityWatch: 'Watch clip',
+      activityLoading: 'Loading…',
+      activityEmpty: 'No feeds yet',
+      activityError: "Couldn't load activity"
     }
   };
 
@@ -187,6 +207,11 @@
   let recordingsLoading = false;
   let recordingsError = false;
   let playingClip = null;
+
+  let activity = null;
+  let activityLoading = false;
+  let activityError = false;
+  let activityTimer;
 
   let secretTapCount = 0;
   let secretTapTimer;
@@ -286,6 +311,37 @@
     }
     recordingsLoading = false;
   }
+
+  // every real dispense (site/app/physical/auto) lands one feed_event, with
+  // its clip filled in ~1 min later once the recording renders. activityLoading
+  // only gates the very first load; later polls refresh in place without
+  // flashing the loading state over an already-populated feed
+  async function loadActivity() {
+    if (activity === null) activityLoading = true;
+    try {
+      const data = await getActivity();
+      activity = data.events || [];
+      activityError = false;
+    } catch (e) {
+      activityError = true;
+    }
+    activityLoading = false;
+  }
+
+  // two-phase: each event becomes a "fed" line at fed_at, plus — once its clip
+  // exists — a separate "clip ready" line at clip_ready_at. flattened and
+  // sorted newest-first so the pair reads as two chat messages a minute apart
+  $: activityLines = (activity || [])
+    .flatMap((e) => {
+      // "錄影整緊…" only while the clip hasn't landed — once it has, the
+      // separate "clip ready" line carries the link and the fed line is plain
+      const lines = [{ kind: 'fed', at: e.fed_at, pending: !e.clip }];
+      if (e.clip) {
+        lines.push({ kind: 'clip', at: e.clip_ready_at || e.fed_at, clip: e.clip });
+      }
+      return lines;
+    })
+    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 
   function formatRecordingTime(iso) {
     const d = new Date(iso);
@@ -473,7 +529,11 @@
     adminToken = localStorage.getItem(ADMIN_TOKEN_KEY);
     if (adminToken) loadHistory();
     refresh();
+    loadActivity();
     pollTimer = setInterval(refresh, 15000);
+    // a fresh clip only lands ~1 min after a feed (post-roll + ffmpeg), so a
+    // slower 30s cadence is plenty and keeps /recordings cheap
+    activityTimer = setInterval(loadActivity, 30000);
     tickTimer = setInterval(() => {
       if (localSecs > 0) localSecs -= 1;
       else if (status && !status.can_feed) refresh();
@@ -486,6 +546,7 @@
     clearInterval(pollTimer);
     clearInterval(tickTimer);
     clearInterval(cameraCheckTimer);
+    clearInterval(activityTimer);
     clearTimeout(toastTimer);
     clearTimeout(secretTapTimer);
     videoRtcEl?.disconnectedCallback?.();
@@ -528,27 +589,72 @@
     </div>
   </header>
 
-  <section class="stage">
-    <video-rtc class="stage-cam" bind:this={videoRtcEl}></video-rtc>
-    <button class="stage-refresh" on:click={refreshCamera} aria-label={t.refreshLabel}>↻</button>
-    <div class="stage-watermark">cat.kelvinp.work</div>
-    <button
-      class="stage-feed-btn"
-      class:ready={canFeed}
-      disabled={!canFeed || feeding}
-      on:click={onFeed}
-    >
-      {btnLabel}
-    </button>
-  </section>
+  <div class="live-layout">
+    <div class="live-main">
+      <section class="stage">
+        <video-rtc class="stage-cam" bind:this={videoRtcEl}></video-rtc>
+        <button class="stage-refresh" on:click={refreshCamera} aria-label={t.refreshLabel}>↻</button>
+        <div class="stage-watermark">cat.kelvinp.work</div>
+        <button
+          class="stage-feed-btn"
+          class:ready={canFeed}
+          disabled={!canFeed || feeding}
+          on:click={onFeed}
+        >
+          {btnLabel}
+        </button>
+      </section>
 
-  <section class="action">
-    <p class="hint">
-      {t.hintLine1(status?.cooldown_minutes ?? 120, status?.amount ?? 10)}
-      {t.hintLine2(status?.window?.close ?? '23:59')}
-      {t.hintLine3(status?.window?.open ?? '07:00', status?.window?.close ?? '23:59')}
-    </p>
-  </section>
+      <section class="action">
+        <p class="hint">
+          {t.hintLine1(status?.cooldown_minutes ?? 120, status?.amount ?? 10)}
+          {t.hintLine2(status?.window?.close ?? '23:59')}
+          {t.hintLine3(status?.window?.open ?? '07:00', status?.window?.close ?? '23:59')}
+        </p>
+      </section>
+    </div>
+
+    <aside class="activity">
+      <div class="activity-head">
+        <div class="activity-title">{t.activityTitle}</div>
+      </div>
+      <p class="activity-sub">{t.activitySub}</p>
+      <div class="activity-feed">
+        {#if activityLoading && !activity}
+          <p class="activity-state">{t.activityLoading}</p>
+        {:else if activityError}
+          <p class="activity-state">{t.activityError}</p>
+        {:else if activity && activity.length === 0}
+          <p class="activity-state">{t.activityEmpty}</p>
+        {:else}
+          {#each activityLines as line (line.kind + line.at)}
+            {#if line.kind === 'clip'}
+              <button class="activity-item" on:click={() => (playingClip = line.clip)}>
+                <div class="activity-item-head">
+                  <span class="activity-time">{formatRecordingTime(line.at)}</span>
+                  <span class="activity-who">{t.activitySystem}</span>
+                </div>
+                <div class="activity-item-body">
+                  {t.activityClipMsg}，<span class="activity-link">{t.activityWatch} ›</span>
+                </div>
+              </button>
+            {:else}
+              <div class="activity-item is-fed">
+                <div class="activity-item-head">
+                  <span class="activity-time">{formatRecordingTime(line.at)}</span>
+                  <span class="activity-who">{t.activitySystem}</span>
+                </div>
+                <div class="activity-item-body">
+                  {t.activityFedMsg}
+                  {#if line.pending}<span class="activity-pending">{t.activityFedPending}</span>{/if}
+                </div>
+              </div>
+            {/if}
+          {/each}
+        {/if}
+      </div>
+    </aside>
+  </div>
 
   {#if adminToken}
     <section class="admin-panel">
@@ -1011,6 +1117,134 @@
     text-align: center;
     margin: 0;
     line-height: 1.6;
+  }
+
+  /* mobile: video block stacked above the activity feed. desktop (>=1100px):
+     video on the left, activity as a fixed-width right rail matching the
+     video block's height, feed scrolling inside it */
+  .live-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .live-main {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+  }
+  @media (min-width: 1100px) {
+    .live-layout {
+      flex-direction: row;
+      align-items: stretch;
+    }
+    .live-main {
+      flex: 1;
+    }
+    .activity {
+      width: 320px;
+      flex-shrink: 0;
+    }
+  }
+
+  .activity {
+    display: flex;
+    flex-direction: column;
+    background: var(--card-solid);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+    min-height: 0;
+  }
+  .activity-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .activity-title {
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .activity-sub {
+    margin: 2px 0 10px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .activity-feed {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  @media (max-width: 1099px) {
+    .activity-feed {
+      max-height: 300px;
+    }
+  }
+  .activity-state {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .activity-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 12px;
+    cursor: var(--cursor-pointer);
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+  }
+  .activity-item:hover {
+    border-color: var(--accent-strong);
+    background: rgba(6, 201, 136, 0.08);
+  }
+  .activity-item-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 3px;
+  }
+  .activity-time {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+  }
+  .activity-who {
+    font-size: 11px;
+    color: var(--accent-strong);
+    font-weight: 600;
+  }
+  .activity-item-body {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text);
+  }
+  .activity-link {
+    color: var(--accent-strong);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  /* the "fed" line has no clip to open yet — flat, non-interactive, no accent
+     hover, so only the "clip ready" line looks clickable */
+  .activity-item.is-fed {
+    cursor: default;
+  }
+  .activity-item.is-fed:hover {
+    border-color: var(--line);
+    background: var(--bg-soft);
+  }
+  .activity-pending {
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
   }
 
   .toast {

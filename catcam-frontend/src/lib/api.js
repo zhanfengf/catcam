@@ -12,6 +12,12 @@ export async function getRecordings() {
   return r.json();
 }
 
+export async function getActivity() {
+  const r = await fetch(`${API_BASE}/activity`, { cache: 'no-store' });
+  if (!r.ok) throw new Error(`activity ${r.status}`);
+  return r.json();
+}
+
 export async function feed() {
   const r = await fetch(`${API_BASE}/feed`, { method: 'POST' });
   let data = {};

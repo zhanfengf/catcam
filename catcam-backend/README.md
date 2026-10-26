@@ -33,6 +33,7 @@ service — the Home Assistant token stays here, never in the browser.
 | POST   | `/admin/announcement` | HMAC-signed. Sets (or clears, with `""`) the announcement banner text. |
 | GET    | `/admin/history`      | HMAC-signed. Today's feed events, straight from PetKit (not our own log). |
 | GET    | `/recordings`         | Public. List of this week's 60s feed clips (filename + timestamp). |
+| GET    | `/activity`           | Public. Today's feed events for the two-phase activity feed (`fed_at` + `clip` + `clip_ready_at`). |
 | GET    | `/health`             | Liveness check.                                          |
 
 `POST /feed` returns `200` on success, `403` outside hours, `429` cooldown or
@@ -263,6 +264,33 @@ one table:
   pushed and when. Nothing reads it yet (no endpoint/UI), but it means "what
   did the banner say last Tuesday" has a real answer later without having
   to have thought to screenshot it at the time.
+
+## Activity feed (two-phase)
+
+A public, read-only feed shown beside the live video (the frontend's 餵食動態
+column). Each real dispense produces **two** chat-style messages about a minute
+apart: "🍚 餵咗 Roll Roll" the moment the feed is detected, then "📹 錄影好咗"
+with a watch-back link once the clip finishes rendering.
+
+Backed by its own `feed_event` table (`id, fed_at, clip, clip_ready_at`),
+written by `recorder.py` off the **same `times_dispensed` signal** as the clip
+recorder — so it covers *every* real dispense (site, PetKit app, physical
+button, scheduled auto-feed), not just site-triggered ones:
+
+- On detection (`_poll_loop`), a row is inserted immediately with `clip` NULL
+  — this is what the "餵咗" line reads, ~1 min before any clip exists.
+- Once the clip is written, `set_feed_event_clip()` fills in `clip` +
+  `clip_ready_at` on that same row (matched by `fed_at`) — the "錄影好咗" line.
+  If the clip ultimately fails to render, the row just stays clip-less and only
+  the "餵咗" line ever shows, which is the honest outcome.
+
+`GET /activity` returns today's rows (newest-first); the frontend expands each
+into the two lines and sorts them by time. Old rows are pruned alongside the
+clips in `_cleanup_old()` (`recording_retention_days`). This is deliberately
+**separate from `feed_log`**: `feed_log` backs the "訪客餵食咗" visitor stat
+(site feeds only, no clip info), `feed_event` backs the public activity feed
+(all dispenses, with clips) — two tables, two jobs, not one row stretched over
+both.
 
 ## Deploy in the LXC (Debian 13, no Docker)
 

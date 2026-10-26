@@ -29,6 +29,19 @@ def init_db(db_path: str) -> None:
                created_at TEXT NOT NULL
            )"""
     )
+    # backs the public two-phase activity feed: one row per real dispense
+    # (any trigger — site/app/physical/auto), written the moment the feed is
+    # detected (clip still NULL), then updated once its clip finishes
+    # rendering ~1 min later. keyed by fed_at because that's the recorder's
+    # own detection timestamp, shared between insert and later update.
+    _conn.execute(
+        """CREATE TABLE IF NOT EXISTS feed_event (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               fed_at TEXT NOT NULL,
+               clip TEXT,
+               clip_ready_at TEXT
+           )"""
+    )
     _conn.commit()
 
 
@@ -99,6 +112,43 @@ def get_announcement_log(limit: int = 20) -> list[dict]:
             (limit,),
         ).fetchall()
     return [{"text": r[0], "created_at": r[1]} for r in rows]
+
+
+def add_feed_event(fed_at: datetime) -> None:
+    with _lock:
+        conn = _db()
+        conn.execute(
+            "INSERT INTO feed_event (fed_at, clip, clip_ready_at) VALUES (?, NULL, NULL)",
+            (fed_at.isoformat(),),
+        )
+        conn.commit()
+
+
+def set_feed_event_clip(fed_at: datetime, clip: str, clip_ready_at: datetime) -> None:
+    with _lock:
+        conn = _db()
+        conn.execute(
+            "UPDATE feed_event SET clip = ?, clip_ready_at = ? WHERE fed_at = ?",
+            (clip, clip_ready_at.isoformat(), fed_at.isoformat()),
+        )
+        conn.commit()
+
+
+def get_feed_events(since: datetime) -> list[dict]:
+    with _lock:
+        rows = _db().execute(
+            "SELECT fed_at, clip, clip_ready_at FROM feed_event "
+            "WHERE fed_at >= ? ORDER BY id DESC",
+            (since.isoformat(),),
+        ).fetchall()
+    return [{"fed_at": r[0], "clip": r[1], "clip_ready_at": r[2]} for r in rows]
+
+
+def prune_feed_events(cutoff: datetime) -> None:
+    with _lock:
+        conn = _db()
+        conn.execute("DELETE FROM feed_event WHERE fed_at < ?", (cutoff.isoformat(),))
+        conn.commit()
 
 
 def count_feeds_today(day_start: datetime) -> int:
