@@ -1485,6 +1485,21 @@
     font-size: 22px;
     top: 16px;
     right: 18px;
+    /* square box sized for the ✕; a transparent border is reserved up front so
+       the green hover frame doesn't shift anything */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    line-height: 1;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    transition: color 0.12s ease, border-color 0.12s ease;
+  }
+  .announcement-modal .modal-close:hover {
+    color: var(--accent-strong);
+    border-color: var(--accent-strong);
   }
   .announcement-modal .announcement-text {
     font-size: 23px;
