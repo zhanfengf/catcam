@@ -66,6 +66,14 @@ kept as the canonical "online" reference frame, so any future re-capture of
 these screenshots reuses the same scene instead of whatever happens to be in
 frame at capture time.
 
+Beside the live view (below it on mobile) is a read-only **feeding activity**
+feed. Every real dispense — from the site, the PetKit app, the physical
+button, or a scheduled auto-feed — posts two messages about a minute apart:
+"🍚 餵咗 Roll Roll" the instant it's detected, then "📹 錄影好咗" with a
+watch-back link once the 60-second clip finishes rendering.
+
+<img src="docs/screenshots/feeding-activity.png" width="300" alt="Feeding activity feed: a 餵咗 message then a 錄影好咗 watch-back link per dispense">
+
 The hidden admin channel (tap the logo 5×, enter the password) unlocks a
 force-feed button that bypasses all the rules above, a simulate-visitor test
 feed for exercising the dispense pipeline without affecting the public
