@@ -4,6 +4,10 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.13.5 — 標題 ⓘ 掣都套用 button-ghost hover(2026-10-27)
+
+- `fef907a` Apply the button-ghost hover to the title info (ⓘ) button——「Roll Roll 直播」標題隔籬嗰個 ⓘ 掣,hover 都換成同公告 ✕、Instagram chip 一致嘅 Lattice `button-ghost` pattern(綠色正方形框 + 綠色圖示 + 10% 透明綠底)。bare icon 掣預留 2px 透明框防跳位。純前端。
+
 ## v0.13.4 — 公告 ✕ hover 補 10% 透明綠底(Lattice button-ghost pattern)(2026-10-27)
 
 - `d02325c` Add the 10% emerald wash to the announcement close-button hover——承接 v0.13.3,公告彈窗 ✕ 嘅 hover 補返 `rgba(6, 201, 136, 0.1)` 10% 透明綠底,令佢同 Instagram handle chip 完全一致。呢個「綠框 + 綠字/圖示 + 10% 透明綠底」嘅 hover 已經正式記入個人 Lattice design-system(`200_Reference/design-systems/lattice/DESIGN.md`)做 `button-ghost` component + `primary-wash` 色票,係該系統唯一有記錄嘅 hover pattern。純前端。
