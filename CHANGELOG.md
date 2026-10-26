@@ -4,6 +4,10 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.13.0 — 直播側邊「餵食動態」欄,兩段式餵咗 + 錄影好咗(2026-10-26)
+
+- `45ca110` Add a two-phase public feeding activity feed——直播畫面右邊加咗一欄「餵食動態」(闊芒並排、窄芒疊落畫面下面),唯讀,畀所有訪客睇。每一次真實出糧出**兩條**聊天式訊息:偵測到嗰刻即出「🍚 餵咗 Roll Roll 錄影整緊…」,約一分鐘後錄影 render 好再出「📹 錄影好咗,睇返錄影 ›」(撳得,用返現有 `/clips/<file>` lightbox 播放器)。後端新開一張 `feed_event` 表(`fed_at` + `clip` + `clip_ready_at`):`recorder.py` 喺偵測到出糧嗰刻(`_poll_loop`)即刻 insert 一行(`clip` 做 NULL),錄影整好先 `set_feed_event_clip()` 補返 clip——即係同觸發錄影同一個 `times_dispensed` 信號,所以**連 PetKit app、機身掣、自動餵都影到**,唔止網站觸發嘅餵食。新加嘅 `GET /activity` 回傳今日嘅事件,前端用 `activityLines` 展開成兩行再按時間排。故意同 `feed_log`(「訪客餵食咗」統計,淨係網站餵食、冇錄影資訊)分開兩張表做兩件事,完全冇改動現有嘅餵食/統計邏輯。Caddy `@api` 清單同步加咗 `/activity` route(兩份 Caddyfile 都改,避開之前中過兩次嘅 SPA fallback 伏)。`feed_event` 由後端重啟嗰刻先開始記,之前嘅餵食唔會追溯顯示。
+
 ## v0.12.0 — 大聲公重開公告制 + 全站自訂 cursor(2026-10-26)
 
 - `b5cfd9a` Add a megaphone re-open button and site-wide custom cursors——語言切換掣左面加咗一粒大聲公 icon(淨係喺有公告時先顯示),撳落去會強制重新彈出公告 card,唔理 `localStorage` 記住嘅關閉狀態。同時幫成個網站換咗自訂 cursor:general cursor 係實心黑色三角箭嘴(加咗白邊,確保喺鏡頭直播深色畫面都唔會隱形);可以撳嘅元素(掣、連結)就用深藍色粗線手指(Lucide `pointer`,白色圓角方塊做底,避免透明背景喺任何地方都睇唔清)。全部用一個 `--cursor-pointer` CSS variable 集中管理——Svelte scoped style 嘅 class 選擇器優先權永遠高過單純 `button` 選擇器,所以逐個元件散落嘅 `cursor: pointer;` 改用返呢個變數,一次維護、處處生效
