@@ -1,0 +1,30 @@
+api:
+  listen: "127.0.0.1:1984"
+
+rtsp:
+  listen: "127.0.0.1:8554"
+
+webrtc:
+  listen: ""
+
+streams:
+  petkit: webrtc:http://127.0.0.1:8099/api/petkit/whep_direct/100033318
+  # go2rtc's codec declaration for `petkit` (built from WHEP SDP negotiation)
+  # doesn't match the real bitstream (declared avc1.42001F Baseline L3.1,
+  # actual is High Profile L5.1) — desktop decoders tolerate the mismatch,
+  # iOS Safari's MSE validator refuses it (MEDIA_ERR_DECODE, go2rtc #2530).
+  # Re-encoding via ffmpeg produces a self-consistent stream iOS accepts.
+  # rtsp listener above stays enabled (localhost-only) because ffmpeg
+  # pushes its output back into go2rtc over RTSP.
+  #
+  # petkit_h264 uses VAAPI hardware encode (h264_vaapi), not go2rtc's
+  # `ffmpeg:...#video=h264` shorthand — this go2rtc build (1.9.14) has no
+  # built-in vaapi template (confirmed: no 'vaapi' string in the binary),
+  # so the full command is hand-written via exec: with the {output}
+  # placeholder go2rtc substitutes with its local RTSP sink. drawtext MUST
+  # run before hwupload — it needs the frame in system RAM, not GPU vaapi
+  # surface memory. Halves CPU vs the old libx264 software encode (~40%
+  # -> ~15-20% of this CT's single core) at the cost of needing /dev/dri
+  # passthrough (dev0 in /etc/pve/lxc/114.conf) and more RAM per ffmpeg
+  # process (~100MB RSS) — CT bumped 512MB -> 4096MB to cover it.
+  petkit_h264: exec:ffmpeg -hide_banner -v error -fflags nobuffer -flags low_delay -i http://127.0.0.1:1984/api/stream.mp4?src=petkit -vaapi_device /dev/dri/renderD128 -vf "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf:fontsize=44:fontcolor=white:shadowcolor=black@0.8:shadowx=2:shadowy=2:x=20:y=80:text='%{localtime\:%Y-%m-%d %X}',format=nv12,hwupload" -c:v h264_vaapi -g 50 -bf 0 -an -user_agent ffmpeg/go2rtc -rtsp_transport tcp -f rtsp {output}

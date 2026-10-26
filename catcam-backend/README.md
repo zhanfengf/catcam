@@ -128,6 +128,21 @@ systemctl enable --now catcam
 systemctl status catcam --no-pager
 ```
 
+## go2rtc config (live-stream pipeline)
+
+`deploy/go2rtc/go2rtc.yaml` and `deploy/go2rtc/go2rtc.service` are a
+checked-in mirror of the actual files running on CT 114
+(`/opt/go2rtc/go2rtc.yaml`, `/etc/systemd/system/go2rtc.service`) — go2rtc
+itself isn't installed from this repo (separate binary + systemd unit), but
+its config carries the project's hardest-won, least-obvious fixes: the WHEP
+auth-proxy workaround, the iOS Safari codec-mismatch fix, the burned-in
+clock, and the VAAPI hardware-encode `exec:` command (see `my-homelab`
+skill's catcam section for the full history of each). **After editing
+either file on the CT, copy the change back into this folder and commit —
+these files have no other version history.** Deploy with the
+`catcam-ct114-transfer` skill's sync pattern:
+`cat deploy/go2rtc/go2rtc.yaml | ssh root@upsn150-pve "pct exec 114 -- tee /opt/go2rtc/go2rtc.yaml > /dev/null" && ssh root@upsn150-pve "pct exec 114 -- systemctl restart go2rtc"`.
+
 Test locally inside the CT:
 
 ```bash

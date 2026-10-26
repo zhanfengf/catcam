@@ -25,9 +25,9 @@ WebSocket + MSE 經 `/camera/ws?src=petkit_h264` 重新 serve 出嚟。前端
 `my-homelab` skill 嘅 catcam 章節）。
 
 左上角個時間唔係前端畫嘅——係 go2rtc 嗰邊用 ffmpeg 嘅 `drawtext` filter
-直接燒錄入條串流度（設定喺 CT 114 嘅 `go2rtc.yaml`，唔喺呢個 repo
-入面）。前端呢邊淨係有個 `.stage-refresh` 掣同 `.stage-watermark`，冇
-clock 相關嘅 state。
+直接燒錄入條串流度（設定喺 `catcam-backend/deploy/go2rtc/go2rtc.yaml`，
+部署到 CT 114 嘅 `/opt/go2rtc/go2rtc.yaml`）。前端呢邊淨係有個
+`.stage-refresh` 掣同 `.stage-watermark`，冇 clock 相關嘅 state。
 
 ## 秘密管理通道
 
