@@ -77,9 +77,11 @@ watch-back link once the 60-second clip finishes rendering.
 The hidden admin channel (tap the logo 5×, enter the password) unlocks a
 force-feed button that bypasses all the rules above, a simulate-visitor test
 feed for exercising the dispense pipeline without affecting the public
-cooldown or stats, and today's PetKit-side dispense history:
+cooldown or stats, an announcement banner, auto-feed safety-net windows
+(auto-feed a portion when a window closes if no one fed during it), and today's
+PetKit-side dispense history:
 
-<img src="docs/screenshots/admin-panel.png" width="260" alt="Admin panel: force feed, simulated test feed, and today's PetKit feed history">
+<img src="docs/screenshots/admin-panel.png" width="260" alt="Admin panel: force feed, simulated test feed, announcement banner, auto-feed windows, and today's PetKit feed history">
 
 ## Tech stack
 
