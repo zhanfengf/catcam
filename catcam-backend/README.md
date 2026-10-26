@@ -92,22 +92,107 @@ file visible in the public listing.
 
 ## Pre-roll buffer
 
-A fixed-length export starting *after* the dispense signal arrives can
-never show the cat running over to eat — by the time the backend even
-learns a dispense happened (HA/PetKit cloud sync alone can take seconds to
-tens of seconds, confirmed via HA's history API: ~6s for a manual app feed,
-~27s for a scheduled auto-feed), the cat may already be at the bowl. There's
-no way to retroactively capture footage that was never recorded, so
-`app/buffer.py` records continuously instead of waiting for a trigger: a
-long-running `ffmpeg -c copy` process pulls `petkit_h264` from go2rtc's own
-RTSP server (`rtsp://127.0.0.1:8554/petkit_h264` — go2rtc serves every
-configured stream name over RTSP, not just the internal exec-mode sink
-paths) and writes it as rolling 5-second segments (`-f segment
--segment_time 5 -strftime 1`) into `buffer_dir` (default `./buffer`),
-deleting anything older than `buffer_window_seconds` (default 180s). Being
-`-c copy` (no re-encode) this costs almost no extra CPU on top of the VAAPI
-encode `petkit_h264` already does — see the `my-homelab` skill's catcam
-section for why that encode is VAAPI hardware and not libx264 software.
+**"Pre-roll" and "24/7 buffering" aren't two alternatives — pre-roll is the
+goal, continuous buffering is the only mechanism that can deliver it.**
+Pre-roll means the final clip contains footage from *before* the trigger
+moment (e.g. the cat approaching the bowl, not just already eating). But
+once a trigger fires, it's too late to go back and capture what already
+happened — if that time window wasn't already being recorded somewhere,
+it's gone, no matter how fast the triggered capture logic runs. The only
+way to have "the past" available when a trigger arrives is to already be
+recording continuously into a rolling window *before* you know a trigger is
+coming, then splice backwards into it once one does. There's no shortcut
+that avoids the 24/7 part.
+
+| | Old: trigger-after export | New: pre-roll buffer |
+|---|---|---|
+| When recording starts | Only after the dispense signal arrives | Always — 24/7, before any trigger exists |
+| Can show the cat running over? | No — by the time it starts, the cat is often already eating | Yes — splices in footage from before `T` |
+| What the clip contains | `[T, T + recording_seconds]` only | `[T - pre_roll_seconds, T + post_roll_seconds]` |
+| Extra steady-state cost | None (idle until triggered) | One `-c copy` ffmpeg process running continuously (~0% CPU, no re-encode) |
+| Disk | Only finished clips in `recordings/` | Finished clips + a small rolling `buffer/` (~3 min of segments, a few hundred MB) |
+| If something's not ready | N/A | Falls back to the old trigger-after export, so a feed event never produces *nothing* |
+
+### Timeline
+
+```
+buffer.py — continuous recording, -c copy, 5s segments, always running
+════════════════════════════════════════════════════════════════════▶ time
+                              │
+                 ┌────────────┴────────────┐
+                 │  real button press       │
+                 │  (HA/PetKit lag: ~6-27s) │
+                 └────────────┬────────────┘
+                              │
+                              ▼
+                 T  ← recorder.py's poller detects the dispense here
+                              │
+        ┌─────────────────────┼─────────────────────────────────────┐
+        │                     │                                     │
+   T - pre_roll_seconds       │                       T + post_roll_seconds
+   (clip starts here —        │                       (clip ends here — recorder.py
+    already in the buffer,    │                        asyncio.sleep()s until this
+    no waiting needed)        │                        moment actually arrives)
+        │                     │                                     │
+        └─────────────────────┴─────────────────────────────────────┘
+                   final clip = concat(segments) → trim →
+                   "Roll Roll running over"  →  "Roll Roll eating"
+```
+
+The left half of the final clip (`T - pre_roll_seconds` to `T`) is pulled
+straight from segments the buffer already wrote *before* the trigger ever
+happened — nothing to wait for. The right half (`T` to `T +
+post_roll_seconds`) doesn't exist yet at detection time, so that's the part
+`recorder.py` has to sleep through before it can assemble anything.
+
+### Pipeline, step by step
+
+1. **Continuous recording (`buffer.py`, always running).** A long-lived
+   `ffmpeg -c copy` process pulls the live `petkit_h264` stream and writes
+   it as rolling 5-second segment files into `buffer_dir`, deleting
+   anything older than `buffer_window_seconds` (default 180s = 3 min). This
+   is what makes "the past" available at all.
+2. **Detecting the trigger (`recorder.py`'s poller).** Every 10s it checks
+   HA's dispense counter. When it increases, it records the detection time
+   `T` — already a few seconds after the real button press, due to the
+   HA/PetKit round trip.
+3. **Waiting for the post-roll window to actually happen.** The clip also
+   needs footage up to `T + post_roll_seconds`, which doesn't exist yet at
+   detection time — the task `asyncio.sleep(post_roll_seconds)`s in the
+   background before continuing (non-blocking; other requests aren't
+   affected).
+4. **Selecting the segments covering `[T - pre_roll_seconds, T +
+   post_roll_seconds]`.** `buffer.segments_covering()` picks every 5s
+   segment file that overlaps that window.
+5. **Lossless concat.** `ffmpeg -f concat -c copy` stitches the selected
+   segments into one continuous stream — same technique as the weekly
+   highlight reel, still no re-encode.
+6. **Precise trim** *(design target — not yet implemented as of this
+   writing; current code stops at step 5, so the actual pre-roll included
+   is rounded up to the 5s segment grid rather than exact)*. The
+   concatenated stream starts at the beginning of whichever segment
+   happened to overlap the window first — not necessarily exactly
+   `pre_roll_seconds` before `T`. A second pass (`ffmpeg -ss <offset> -i
+   concat.mp4 -t <pre_roll_seconds + post_roll_seconds> -c copy
+   final.mp4`) would trim to the exact requested window. Still `-c copy`,
+   so it can only cut on a keyframe, not an arbitrary frame — at this
+   encode's GOP size (`-g 50` @ ~27.5fps) that's roughly **±1.8s
+   accuracy**, far tighter than the 5s segment grid, with no re-encode
+   cost.
+7. **Save + publish.** The result is written to `recordings_dir`, old clips
+   past `recording_retention_days` get cleaned up, and it becomes visible
+   via `GET /recordings` and playable at `/clips/<filename>.mp4`.
+8. **Fallback.** If the buffer has nothing covering the window (service
+   just restarted, buffer hasn't filled yet), step 4 comes back empty and
+   the whole splice path is skipped in favor of the original
+   duration-limited go2rtc export — a plain post-trigger clip with no
+   pre-roll, rather than no clip at all.
+
+Confirmed via HA's history API how much HA/PetKit cloud sync lag there
+really is between a real dispense and the backend even learning about it —
+~6s for a manual app feed, ~27s for a scheduled auto-feed — which is why
+step 2 above can't just be "trigger fast enough," the cat can already be at
+the bowl before the signal even arrives.
 
 **Non-obvious:** ffmpeg's `-strftime 1` filenames use the *spawned
 process's* wall clock, not Python's `datetime.now(tz())`. `go2rtc.service`
@@ -119,21 +204,6 @@ the time `segments_covering()`/`_cleanup_old()` parse them as HK time —
 every segment looks instantly older than `buffer_window_seconds` and gets
 deleted within one cleanup cycle (5s), so the buffer silently never holds
 more than one near-empty file no matter how long it runs.
-
-When `recorder.py`'s poller detects a dispense at time `T`, it waits
-`post_roll_seconds` (default 45s) for the buffer to actually have footage
-past `T`, then pulls every segment overlapping
-`[T - pre_roll_seconds, T + post_roll_seconds]` (default 3s pre-roll) and
-losslessly concatenates them (`ffmpeg -f concat -c copy`, same technique as
-the weekly highlight reel) into the final clip — so the published clip now
-starts *before* the dispense, not after it. Selection is whole-segment, not
-frame-exact, so the actual pre-roll included is rounded up to the nearest
-`buffer_segment_seconds` boundary (e.g. a 3s `pre_roll_seconds` against 5s
-segments typically pulls in one full preceding segment, closer to ~5s of
-real pre-roll than exactly 3). If the buffer has nothing
-covering that window (just restarted, `petkit_h264` briefly down), it falls
-back to the old duration-limited go2rtc export — a plain post-trigger clip
-with no pre-roll, rather than no clip at all.
 
 ## Weekly highlight reel
 
