@@ -2,11 +2,11 @@
 
 版本記錄,新嘅喺上面。每項列返對應嘅 git commit hash,想睇完整 diff 用 `git show <hash>`。
 
-有部分基建層面嘅改動(CT 114 上嘅 `go2rtc.yaml`/`go2rtc.service`、Proxmox 設定)**冇喺呢個 repo 嘅 git history 入面**——呢兩個檔案本身就冇受 git 追蹤(淨係喺 CT 114 度留 `.bak` 備份),所以呢類改動會喺呢份 changelog 入面獨立列出,但唔會有對應嘅 commit hash。
+純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
-## Unreleased(基建,唔喺呢個 repo 嘅 git history 入面)
+## v0.8.0 — go2rtc VAAPI 硬件編碼 + 設定帶入版本控制(2026-10-26)
 
-- **go2rtc 直播編碼由軟件轉做 VAAPI 硬件編碼**(2026-10-26):`petkit_h264` stream 由 `ffmpeg:...#video=h264` 簡寫(內部用 `libx264` 軟件編碼)改做手寫 `exec:` 命令,用 `h264_vaapi` 經 CT 114 嘅 `/dev/dri/renderD128` 做硬件編碼。CPU 由 ~40% 跌到 ~15%(單核)。隨附改動:CT 114 加 `/dev/dri` passthrough(`dev0`)、RAM 由 512MB 加到 4096MB、go2rtc.yaml 改用 plain YAML scalar 避開 `\:` escape 問題、`-vf` 值要完整用雙引號包住先唔會俾 go2rtc 嘅 `exec:` 解析器因為內部空格拆散。改動位置:CT 114 嘅 `/opt/go2rtc/go2rtc.yaml`(備份喺同一目錄 `.bak-pre-vaapi`)。
+- `de8cec7` Bring go2rtc.yaml/service under version control, starting with the VAAPI switch——`petkit_h264` stream 由 `ffmpeg:...#video=h264` 簡寫(內部用 `libx264` 軟件編碼)改做手寫 `exec:` 命令,用 `h264_vaapi` 經 CT 114 嘅 `/dev/dri/renderD128` 做硬件編碼,CPU 由 ~40% 跌到 ~15%(單核)。同時將 `go2rtc.yaml`/`go2rtc.service` 由「只喺 CT 114 度留 `.bak`、零 git history」帶入呢個 repo(`catcam-backend/deploy/go2rtc/`),之後改動都有真正 diff 可以睇
 
 ## v0.7.0 — Gallery 互動 + LIVE 狀態反映真實連線(2026-10-25 – 2026-10-26)
 
