@@ -4,9 +4,10 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
-## v0.14.2 — 隱藏直播原生 video 控制列(hover 唔再出進度條)(2026-10-27)
+## v0.14.2 — 隱藏直播閃動進度條,保留全螢幕 + 子母畫面(2026-10-27)
 
-- `a98ec97` Hide the native video controls on the live stream——cursor hover 直播畫面時,瀏覽器原生 `<video>` 控制列(進度條 + 靜音/全螢幕/⋮)會出現,而 live MSE 串流冇真實時間軸,條進度條會不停 reset、睇落好似 reload。go2rtc 嘅 `video-rtc.js` 喺自己 `oninit` set `controls=true`;喺 `CatCamVideo` subclass override `oninit`,`super.oninit()` 之後 set `controls=false`(`oninit` 淨係喺 connectedCallback 行一次,所以 ws 重連都唔會變返)。試過用 CSS `::-webkit-media-controls` 隱藏但 Svelte scoped `:global` 處理 webkit pseudo-element 唔生效,所以用 JS。純前端。
+- `a98ec97` Hide the native video controls on the live stream——cursor hover 直播畫面時,瀏覽器原生 `<video>` 控制列(進度條 + 靜音/全螢幕/⋮)會出現,而 live MSE 串流冇真實時間軸,條進度條會不停 reset、睇落好似 reload。go2rtc 嘅 `video-rtc.js` 喺自己 `oninit` set `controls=true`;喺 `CatCamVideo` subclass override `oninit`,`super.oninit()` 之後 set `controls=false`(`oninit` 淨係喺 connectedCallback 行一次,所以 ws 重連都唔會變返)。試過用 CSS `::-webkit-media-controls` 隱藏但 Svelte scoped `:global` 處理 webkit pseudo-element 唔生效,所以用 JS。
+- `63d8cf7` Keep fullscreen + PiP via custom buttons——`controls=false` 連全螢幕同子母畫面(PiP)掣都一齊收埋咗,所以喺 ↻ 隔籬加返兩粒自訂 overlay 掣(Lucide `maximize` + `picture-in-picture-2` 圖示),分別接 `requestFullscreen` / `requestPictureInPicture`。即係閃動進度條冇咗,但有用嗰兩個功能保留返,仲完全可控、唔使同 webkit 控制列搏鬥。純前端。
 
 ## v0.14.1 — 餵食動態改聊天式排序(最新喺底)+ 自動捲到底(2026-10-27)
 
