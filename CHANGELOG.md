@@ -4,6 +4,11 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.11.0 — 公告欄 + 歷史紀錄,補齊 README 文檔(2026-10-26)
+
+- `cd538b2` Document the announcement banner, admin_test tagging, and HA offline check——兩份 README 之前已經同 `app/main.py` 脫節——Endpoints 表完全冇列 `/admin/feed-test`、`/admin/announcement`,冇提過 `ha_online`、`feed_log` 嘅 `admin_test:` 標記、公告彈窗嘅 dismiss 邏輯。另外明文記低今次踩咗兩次嘅 Caddyfile 伏:新加任何 `/admin/*` route,CT 本機嘅 `@api path` 清單(唔淨係 repo 複本)都要同步更新,否則請求靜默跌落 SPA fallback,攞住 HTML 當 JSON 解析
+- `ceea45a` Add announcement banner with an append-only history log——秘密通道可以推一句自由文字俾所有訪客(`POST /admin/announcement`),`GET /status` 帶返呢個文字,前端一入站就彈出(重用現有 `.modal` 樣式),撳 ✕ 關閉會記住**實際文字**落 `localStorage`,所以改咗公告內容會令所有人(包括之前已經撳過關閉嘅)再見到一次。`state.announcement` 淨係存現時生效緊嗰個值(同 `last_fed_at` 一樣嘅 upsert 寫法),獨立開多一張 `announcement_log` table 每次儲存都 append 一行——故意唔用同一行解決兩個唔同問題(「而家生效緊嘅係乜」vs「過去出過咩、幾時出」)
+
 ## v0.10.0 — HA 離線偵測、模擬訪客測試出糧、README 截圖(2026-10-26)
 
 - `7784459` Add screenshot gallery to README——截咗餵貓制四種狀態(ready/cooldown/outside-hours/ha-offline)同已解鎖嘅 admin 面板,放入 `docs/screenshots/`;ha-offline 嗰張特登喺 Playwright 層面擋晒 camera 嘅 WebSocket(連 constructor 都 mock 咗)同 HLS fallback 先截,因為真實 HA 斷晒嗰陣連鏡頭都會一齊斷,唔淨係餵貓制
