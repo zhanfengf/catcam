@@ -51,27 +51,36 @@ async def _check_once() -> None:
         parsed = parse_window(w)
         if not parsed:
             continue
-        start_t, end_t = parsed
+        _, end_t = parsed
 
         if handled.get(w) == today:
             continue
         if n.time() < end_t:
             continue  # window hasn't closed yet today
 
-        start_dt = n.replace(hour=start_t.hour, minute=start_t.minute, second=0, microsecond=0)
         end_dt = n.replace(hour=end_t.hour, minute=end_t.minute, second=0, microsecond=0)
 
         if n > end_dt + timedelta(minutes=_GRACE_MINUTES):
             handled[w] = today  # too late to feed sensibly — just mark done
             changed = True
             continue
-        if db.has_feed_in_window(start_dt, end_dt):
-            handled[w] = today  # someone already fed in the window
+
+        s = get_settings()
+        last_fed = db.get_last_fed_at()
+        if last_fed and end_dt - last_fed < timedelta(minutes=s.cooldown_minutes):
+            # a feed (any source, any window) already landed within the
+            # global cooldown of this window's close — treat it as already
+            # covered rather than re-checking the window's own fixed range.
+            # Keys this off wall-clock distance instead of the window string
+            # so editing a window's times mid-day can't make an already-fed
+            # slot look "unfed" again (the exact bug that caused the
+            # 2026-10-28 double feed: a window edit after the day's feed
+            # moved the lookup range away from the actual fed_at timestamp).
+            handled[w] = today
             changed = True
             continue
 
-        # nobody fed during the window and we're still within grace — feed now
-        s = get_settings()
+        # nobody fed within cooldown of this window and we're still within grace — feed now
         try:
             # marker before dispensing so the recorder's poller (which creates
             # the feed_event when times_dispensed bumps) can tag it as auto
