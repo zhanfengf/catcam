@@ -4,6 +4,10 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.15.1 — 斷流期間 /status 加快輪詢,復原後個掣即刻跳返(2026-10-27)
+
+- `36a65ca` Poll /status every ~4s while offline so the button snaps back on recovery——`v0.15.0` 上線後第一次真實斷流(08:36 起 go2rtc `ERR [exec] timeout`),自動修復喺 08:39:04 準時觸發重啟 go2rtc、畫面返到,證明功能 work。但凱雯發現畫面返咗之後個餵食掣仲卡住「📷 直播中斷」一陣——因為前端主輪詢係 15 秒一次,復原瞬間個掣要等下一個 poll 先更新。修法:前端 tick(每秒)見到 `reason` 係 `stream_offline`/`ha_offline` 時,改為**每 ~4 秒** refresh 一次 `/status`,等後端一翻 `stream_online`/`ha_online`,個掣就即刻跳返餵貓/cooldown 狀態,唔會呆住。純前端。
+
 ## v0.15.0 — 斷流時自動 disable 餵食掣 + 背景自動修復(2026-10-27)
 
 - `ec66402` Disable feeding + auto-recover on live-stream outage——補返一個大盲點:之前 `ha_offline` 淨係 ping HA `/api/` 睇 HA 本身通唔通,但最常見嗰種斷流係**PetKit 雲端 WHEP session 靜靜雞斷咗、HA 仍然報 `streaming`**,所以餵食掣照開、但畫面係黑嘅。
