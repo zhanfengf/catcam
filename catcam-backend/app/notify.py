@@ -16,7 +16,11 @@ async def send(text: str) -> None:
         return
     url = f"https://api.telegram.org/bot{s.telegram_bot_token}/sendMessage"
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        # CT 114 resolves api.telegram.org to an IPv6 address but has no IPv6
+        # route, so a default client hangs until timeout. Binding the socket to
+        # the IPv4 wildcard forces IPv4 (same effect as curl -4).
+        transport = httpx.AsyncHTTPTransport(local_address="0.0.0.0")
+        async with httpx.AsyncClient(timeout=10.0, transport=transport) as client:
             resp = await client.post(url, json={
                 "chat_id": s.telegram_chat_id,
                 "text": text,
