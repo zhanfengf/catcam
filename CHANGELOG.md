@@ -4,6 +4,10 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.16.2 — 首次訪客語言跟瀏覽器設定自動選(2026-10-27)
+
+- `fe2fe80` Default first-visit language from navigator.languages——之前新訪客**一律硬繁中**（`lang = localStorage || 'zh'`），冇睇地區冇睇瀏覽器語言。新增 `detectLang()` 睇 `navigator.languages`：任何 `zh*`（zh-HK/zh-TW/zh-CN…）→ 繁中,其餘 → 英文。優先次序 **localStorage 手動揀 > 瀏覽器語言 > fallback 繁中**，所以自動偵測淨係決定「第一次」睇邊種,撳過切換就永遠用返佢揀嘅。揀咗睇瀏覽器語言偏好而唔係 Geo-IP——反映訪客想睇乜語言（香港人部機設英文會見英文），而唔係佢人喺邊。純前端。
+
 ## v0.16.1 — 加 Open Graph 連結預覽(貼 link 有 Roll Roll 卡)(2026-10-27)
 
 - `97f9cf6` Add Open Graph + Twitter card meta——之前 SPA 個 `<head>` 淨係得 charset/icon/viewport,冇 `<title>` 冇任何 `og:` tag,所以貼 `cat.kelvinp.work` 落 Telegram/WhatsApp/iMessage 只會「Loading…」然後冇預覽卡。喺 `src/app.html` 加咗靜態 og + twitter card:`<title>`、`og:title/description/url`、`og:image`(用 `static/photos/rollroll-3.jpg`,1600×1200 橫向,已去 EXIF 本身公開)、`twitter:card=summary_large_image`。貼 link 就會出 Roll Roll 大圖卡。純前端。註:Telegram 會 cache 預覽,改完要用 @WebpageBot refresh 或者貼個唔同嘅 URL 先見到新卡。
