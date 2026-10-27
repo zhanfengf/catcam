@@ -192,6 +192,15 @@
     localStorage.setItem(LANG_KEY, l);
   }
 
+  // first-visit default: honour the visitor's own browser/OS language instead
+  // of always forcing 繁中 — any zh* locale (zh-HK/zh-TW/zh-CN…) → Chinese,
+  // everything else → English. A manual toggle (stored in localStorage) always
+  // wins over this, so it only ever picks the *initial* language.
+  function detectLang() {
+    const prefs = navigator.languages || [navigator.language || ''];
+    return prefs.some((l) => l.toLowerCase().startsWith('zh')) ? 'zh' : 'en';
+  }
+
   let videoRtcEl;
 
   class CatCamVideo extends VideoRTC {
@@ -597,7 +606,7 @@
   }
 
   onMount(() => {
-    lang = localStorage.getItem(LANG_KEY) || 'zh';
+    lang = localStorage.getItem(LANG_KEY) || detectLang();
     adminToken = localStorage.getItem(ADMIN_TOKEN_KEY);
     if (adminToken) loadHistory();
     refresh();

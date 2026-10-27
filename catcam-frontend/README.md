@@ -114,9 +114,15 @@ surface-soft 表頭、hairline 行線），撳某一行會播返條 `/clips/<fil
 
 ## 雙語
 
-`translations.zh` / `translations.en` 兩個字典,`lang` 存喺
-`localStorage`,全站文字（包括提示句、按鈕、toast）都跟住切換,唔係中英
-對照同時顯示。
+`translations.zh` / `translations.en` 兩個字典,全站文字（包括提示句、按鈕、
+toast）都跟住切換,唔係中英對照同時顯示。
+
+首次訪客嘅語言用 `detectLang()` 睇 `navigator.languages`——任何 `zh*`
+（zh-HK/zh-TW/zh-CN…）→ 繁中,其餘 → 英文,即係跟訪客自己部機嘅語言設定,
+唔再一律硬繁中。優先次序：**`localStorage` 手動揀過 > 瀏覽器語言 > fallback
+繁中**，所以自動偵測只決定「第一次」睇邊種,訪客撳過切換之後永遠用返佢揀嘅
+（存喺 `localStorage`）。呢個係睇瀏覽器語言偏好,唔係 Geo-IP 地理位置——一個
+香港人部機設咗英文,佢會見英文（反映佢想睇乜,而唔係人喺邊）。
 
 ## Build(可以喺 macOS 或 CT 內做)
 
