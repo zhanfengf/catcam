@@ -5,7 +5,7 @@ from pathlib import Path
 
 import httpx
 
-from . import buffer, db
+from . import buffer, db, notify
 from .config import get_settings
 from .scheduling import tz
 
@@ -45,7 +45,23 @@ async def _get_times_dispensed(client: httpx.AsyncClient) -> int | None:
         return None
 
 
-async def _record_clip(when: datetime) -> None:
+async def _notify_visitor_feed(when: datetime, visitor: dict, clip_name: str | None) -> None:
+    s = get_settings()
+    ip = visitor.get("ip") or "?"
+    country = visitor.get("country") or "?"
+    lines = [
+        "🍚 有訪客餵咗 Roll Roll",
+        f"🕐 {when.strftime('%Y-%m-%d %H:%M')}",
+        f"🌐 {ip} · {country}",
+    ]
+    if clip_name:
+        lines.append(f"📹 {s.public_base_url.rstrip('/')}/clips/{clip_name}")
+    else:
+        lines.append("📹（今次錄影整唔到）")
+    await notify.send("\n".join(lines))
+
+
+async def _record_clip(when: datetime, visitor: dict | None = None) -> None:
     s = get_settings()
     final_path = recordings_dir() / (when.strftime(FILENAME_FMT) + ".mp4")
 
@@ -102,14 +118,20 @@ async def _record_clip(when: datetime) -> None:
             list_path.unlink(missing_ok=True)
             concat_raw.unlink(missing_ok=True)
 
-    if not final_path.exists():
+    clip_name: str | None = None
+    if final_path.exists():
+        # phase 2 of the activity feed — attach the finished clip to the "fed"
+        # event already logged at detection time in _poll_loop
+        clip_name = final_path.name
+        db.set_feed_event_clip(when, clip_name, datetime.now(tz()))
+        _cleanup_old()
+    else:
         logger.warning("recorder: no clip produced for trigger at %s", when)
-        return
 
-    # phase 2 of the activity feed — attach the finished clip to the "fed"
-    # event already logged at detection time in _poll_loop
-    db.set_feed_event_clip(when, final_path.name, datetime.now(tz()))
-    _cleanup_old()
+    # Telegram alert for a genuine web-visitor feed (sent even if the clip
+    # failed, just without the link) — app/button/admin feeds have no marker
+    if visitor and get_settings().notify_visitor_feeds:
+        await _notify_visitor_feed(when, visitor, clip_name)
 
 
 async def _record_clip_live_export(final_path: Path, seconds: int) -> None:
@@ -193,12 +215,15 @@ async def _poll_loop() -> None:
                 # if the scheduler just dispensed (marker set <90s ago), tag
                 # this event as that auto-feed so the feed shows the 🤖 line
                 auto_window = db.pop_auto_feed_pending(when, 90)
+                # a genuine site /feed also left an IP+country marker; app /
+                # physical-button / admin dispenses leave neither
+                visitor = None if auto_window else db.pop_visitor_feed_pending(when, 90)
                 db.add_feed_event(
                     when,
                     source="auto" if auto_window else "visitor",
                     note=auto_window,
                 )
-                asyncio.create_task(_record_clip(when))
+                asyncio.create_task(_record_clip(when, visitor))
             last_val = val
 
 

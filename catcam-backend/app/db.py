@@ -234,6 +234,33 @@ def pop_auto_feed_pending(now: datetime, within_seconds: int) -> str | None:
     return None
 
 
+def set_visitor_feed_pending(ip: str | None, country: str | None, at: datetime) -> None:
+    """Stash a web visitor's IP + country at /feed time so the recorder can
+    attach them to the matching dispense (and push a Telegram alert). Only the
+    site's /feed sets this, so app/physical-button/admin feeds — which have no
+    IP — never match and never get pushed."""
+    _set_state("visitor_feed_pending", json.dumps(
+        {"ip": ip, "country": country, "at": at.isoformat()}))
+
+
+def pop_visitor_feed_pending(now: datetime, within_seconds: int) -> dict | None:
+    """Return (and clear) the pending web-visitor info if it was set within the
+    last `within_seconds`. Stale/invalid markers are cleared and ignored."""
+    raw = _get_state("visitor_feed_pending", "")
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        at = datetime.fromisoformat(data["at"])
+    except (ValueError, KeyError):
+        _set_state("visitor_feed_pending", "")
+        return None
+    _set_state("visitor_feed_pending", "")
+    if (now - at).total_seconds() <= within_seconds:
+        return {"ip": data.get("ip"), "country": data.get("country")}
+    return None
+
+
 def prune_feed_events(cutoff: datetime) -> None:
     with _lock:
         conn = _db()

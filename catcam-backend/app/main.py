@@ -135,6 +135,11 @@ async def feed(request: Request):
 
         fed_at = now()
         db.record_feed(fed_at, ip, st["amount"])
+        # mark this as a genuine web-visitor feed so the recorder can push a
+        # Telegram alert with IP + country once the clip is ready. Country is
+        # Cloudflare's own geolocation header (no external geo-IP lookup).
+        country = request.headers.get("cf-ipcountry")
+        db.set_visitor_feed_pending(ip, country, fed_at)
 
     new_status = build_status(db.get_last_fed_at())
     return {"ok": True, "message": "餵咗喇！🐱", **new_status}

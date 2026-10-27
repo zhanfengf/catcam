@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
 
+    # push a Telegram alert (time + IP + country + clip URL) for each genuine
+    # web-visitor feed; clip links are built off this public base
+    notify_visitor_feeds: bool = True
+    public_base_url: str = "https://cat.kelvinp.work"
+
     @property
     def open_t(self) -> time:
         return _parse_hhmm(self.open_time)
