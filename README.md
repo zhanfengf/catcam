@@ -127,6 +127,40 @@ hammered.
 - **Infra:** Caddy (static serving + reverse proxy), Cloudflare Tunnel, Home
   Assistant, go2rtc (WHEP → WebSocket+MSE relay for the live camera)
 
+## Where it runs (platform & resources)
+
+Both parts run **together in one unprivileged LXC container** on my home
+Proxmox box — no Docker, no Kubernetes, just systemd services. The Intel iGPU's
+render node is passed into the container so go2rtc can do **hardware (VAAPI)
+H264 encoding** of the re-streamed feed; that's what keeps CPU low.
+
+| | What I actually run | Measured idle usage |
+| --- | --- | --- |
+| Host | Proxmox VE 9.2, kernel 6.x | — |
+| Container | Debian 13 (trixie) LXC | — |
+| vCPU | 1 core | ~16% of it (peak is the VAAPI encode) |
+| RAM | 4 GB (generous overkill) | ~250 MB |
+| Swap | 512 MB | 0 |
+| Disk | 8 GB volume | ~2.8 GB (OS + venv + 7-day clips) |
+| GPU | `/dev/dri/renderD128` passed in (VAAPI) | — |
+
+### Recommended minimum
+
+The 4 GB RAM is wildly more than needed — this comfortably fits a small box.
+A realistic floor:
+
+| Resource | Minimum | Notes |
+| --- | --- | --- |
+| **CPU** | **1 vCPU *with* hardware video encode** (VAAPI/an iGPU render node) | The one real cost is encoding the live re-stream. With VAAPI it's ~15% of a core. **Without** hardware encode, software H264 will peg a single core — then budget **2+ vCPU**. |
+| **RAM** | **512 MB** (1 GB comfortable) | Measured footprint is ~250 MB; the rest is headroom + page cache. |
+| **Disk** | **~4 GB** | OS + Python venv + the SvelteKit build + a rolling 7-day window of 60s clips (grows with how often the cat is fed). |
+| **OS** | Any systemd Linux | No Docker required; it's plain `systemd` units. |
+| **Network** | Outbound to Home Assistant + the feeder's cloud; a reverse proxy or tunnel (Caddy + Cloudflare Tunnel here) to expose it publicly | WebRTC media never needs to be exposed — only HTTPS/WSS. |
+
+In short: **1 core + 512 MB–1 GB RAM + a few GB disk + an iGPU for VAAPI** is
+plenty. The camera and feeder themselves (a PetKit YumShare Solo) and a Home
+Assistant instance are the other prerequisites.
+
 ## Quick start
 
 Run the two parts separately during development:
