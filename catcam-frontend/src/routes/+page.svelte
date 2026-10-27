@@ -224,6 +224,7 @@
   let toastTimer;
   let pollTimer;
   let tickTimer;
+  let offlineRefreshTick = 0;
   let cameraConnected = false;
   let cameraCheckTimer;
   let showInfoModal = false;
@@ -608,6 +609,14 @@
     tickTimer = setInterval(() => {
       if (localSecs > 0) localSecs -= 1;
       else if (status && !status.can_feed) refresh();
+      // while the feeder/stream is offline, poll faster than the 15s main
+      // cycle so the button snaps back the moment it recovers (e.g. right
+      // after stream auto-recovery) instead of lingering on "直播中斷"
+      if (status && (status.reason === 'stream_offline' || status.reason === 'ha_offline')) {
+        if (++offlineRefreshTick >= 4) { offlineRefreshTick = 0; refresh(); }
+      } else {
+        offlineRefreshTick = 0;
+      }
     }, 1000);
     initCamera();
     cameraCheckTimer = setInterval(checkCameraConnection, 3000);
