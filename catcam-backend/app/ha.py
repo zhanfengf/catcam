@@ -114,6 +114,31 @@ async def dispense(amount: int) -> None:
         raise HAError(f"HA returned {resp.status_code}: {resp.text[:200]}")
 
 
+_CAMERA_ENTITY = "camera.zhi_ma_guan_jia"
+
+
+async def reload_petkit() -> None:
+    """Reload the PetKit integration's config entry, forcing HA to rebuild its
+    session with the PetKit cloud. This is what actually clears a WHEP stall —
+    restarting go2rtc alone usually isn't enough (see the my-homelab skill)."""
+    s = get_settings()
+    if not s.ha_token:
+        raise HAError("HA_TOKEN is not configured")
+    url = f"{s.ha_url.rstrip('/')}/api/services/homeassistant/reload_config_entry"
+    headers = {
+        "Authorization": f"Bearer {s.ha_token}",
+        "Content-Type": "application/json",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(url, headers=headers,
+                                     json={"entity_id": _CAMERA_ENTITY})
+    except httpx.RequestError as exc:
+        raise HAError(f"Cannot reach Home Assistant: {exc}") from exc
+    if resp.status_code >= 400:
+        raise HAError(f"HA returned {resp.status_code}: {resp.text[:200]}")
+
+
 # background connectivity check, polled independently of /feed attempts so
 # /status can report "offline" and the frontend can disable the feed button
 # before a visitor ever tries and hits a 502

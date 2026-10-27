@@ -51,6 +51,23 @@ class Settings(BaseSettings):
     pre_roll_seconds: int = 15
     post_roll_seconds: int = 45
 
+    # stream liveness is read off the 24/7 buffer: if the newest segment's
+    # mtime hasn't advanced within this many seconds, no frames are flowing
+    # (upstream PetKit/HA WHEP stall) even if HA still reports "streaming"
+    stream_stale_seconds: int = 30
+    # a real ~5s segment is hundreds of KB; segments below this are the empty
+    # churn of a starved/reconnecting ffmpeg and don't count as live frames
+    buffer_min_segment_bytes: int = 20000
+    # sustained outage before the watcher auto-runs recovery (reload PetKit
+    # integration + restart go2rtc), and the min gap between two attempts so a
+    # genuine cloud outage isn't hammered
+    stream_recover_after_seconds: int = 75
+    stream_recover_cooldown_seconds: int = 300
+    stream_auto_recover: bool = True
+    # touched by the backend to ask a root systemd path unit to restart go2rtc
+    # (this CT has no sudo); see deploy/go2rtc-restart.{path,service}
+    go2rtc_restart_trigger: str = "./go2rtc-restart.trigger"
+
     @property
     def open_t(self) -> time:
         return _parse_hhmm(self.open_time)

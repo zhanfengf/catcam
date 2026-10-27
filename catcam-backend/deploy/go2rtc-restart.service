@@ -1,0 +1,9 @@
+# Oneshot restart of go2rtc, triggered by go2rtc-restart.path when the catcam
+# backend touches /opt/catcam-backend/go2rtc-restart.trigger. Runs as root
+# (default), so the backend never needs any elevated privilege itself.
+[Unit]
+Description=Restart go2rtc (catcam stream auto-recovery)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart go2rtc

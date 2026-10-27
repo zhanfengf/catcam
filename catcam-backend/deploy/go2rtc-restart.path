@@ -1,0 +1,18 @@
+# Lets the unprivileged catcam backend request a go2rtc restart without sudo
+# (this CT has no sudo installed). The backend's streamwatch auto-recovery
+# touches the trigger file; this path unit (running as root) sees the
+# modification and starts go2rtc-restart.service.
+#
+# Install on CT 114:
+#   cp go2rtc-restart.path go2rtc-restart.service /etc/systemd/system/
+#   install -o catcam -g catcam -m 644 /dev/null /opt/catcam-backend/go2rtc-restart.trigger
+#   systemctl daemon-reload && systemctl enable --now go2rtc-restart.path
+[Unit]
+Description=Watch catcam trigger file to restart go2rtc
+
+[Path]
+PathModified=/opt/catcam-backend/go2rtc-restart.trigger
+Unit=go2rtc-restart.service
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,78 @@
+import asyncio
+import logging
+import time
+
+from . import buffer, ha
+from .config import get_settings
+
+log = logging.getLogger("catcam.streamwatch")
+
+_CHECK_SECONDS = 15
+
+_online = True
+_down_since: float | None = None
+_last_recover: float = 0.0
+_task: asyncio.Task | None = None
+
+
+def is_online() -> bool:
+    return _online
+
+
+def _restart_go2rtc() -> bool:
+    """Request a go2rtc restart without any root privilege: touch a trigger
+    file the catcam user owns. A root-run systemd path unit
+    (go2rtc-restart.path → go2rtc-restart.service, in deploy/) watches it and
+    runs `systemctl restart go2rtc` on modification. This CT has no sudo, and
+    this keeps catcam's extra capability to exactly one action."""
+    from pathlib import Path
+    try:
+        Path(get_settings().go2rtc_restart_trigger).touch()
+        return True
+    except OSError as exc:
+        log.warning("could not touch go2rtc restart trigger: %s", exc)
+        return False
+
+
+async def _recover() -> None:
+    """Same sequence as scripts/fix-catcam-stream.sh, run in-process: reload the
+    PetKit integration (the real fix), then restart go2rtc so it re-pulls a
+    fresh WHEP session."""
+    log.info("stream down — auto-recovery: reload PetKit integration")
+    try:
+        await ha.reload_petkit()
+    except ha.HAError as exc:
+        log.warning("PetKit reload failed: %s", exc)
+    await asyncio.sleep(25)
+    ok = _restart_go2rtc()
+    log.info("auto-recovery go2rtc restart requested ok=%s", ok)
+
+
+async def _loop() -> None:
+    global _online, _down_since, _last_recover
+    while True:
+        _online = buffer.stream_online()
+        s = get_settings()
+        if _online:
+            _down_since = None
+        else:
+            now = time.monotonic()
+            if _down_since is None:
+                _down_since = now
+            down_for = now - _down_since
+            if (s.stream_auto_recover
+                    and down_for >= s.stream_recover_after_seconds
+                    and now - _last_recover >= s.stream_recover_cooldown_seconds):
+                _last_recover = now
+                await _recover()
+        await asyncio.sleep(_CHECK_SECONDS)
+
+
+def start() -> None:
+    global _task
+    _task = asyncio.create_task(_loop())
+
+
+def stop() -> None:
+    if _task:
+        _task.cancel()

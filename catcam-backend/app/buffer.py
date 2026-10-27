@@ -35,6 +35,45 @@ def segments_covering(start: datetime, end: datetime) -> list[Path]:
     return [p for _, p in items]
 
 
+def newest_segment_age() -> float | None:
+    """Seconds since the most recent *data-bearing* buffer segment was last
+    written, or None if there are none yet. The 24/7 recorder writes a fresh
+    segment every few seconds while frames flow; a frozen mtime means the
+    upstream stream has stalled.
+
+    Only segments above a byte floor count: when go2rtc is up but starved of
+    frames (a real PetKit cloud stall), the recorder's ffmpeg keeps
+    reconnecting and can churn out near-empty segments with fresh mtimes —
+    counting those would falsely read as 'online'. A real 5s segment is
+    hundreds of KB; the floor rejects the empty churn and the just-opened
+    current segment, so age reflects the last segment that actually carried
+    video."""
+    floor = get_settings().buffer_min_segment_bytes
+    newest: float | None = None
+    for f in buffer_dir().glob("*.mp4"):
+        try:
+            stat = f.stat()
+        except OSError:
+            continue
+        if stat.st_size < floor:
+            continue
+        if newest is None or stat.st_mtime > newest:
+            newest = stat.st_mtime
+    if newest is None:
+        return None
+    return max(0.0, datetime.now(tz()).timestamp() - newest)
+
+
+def stream_online() -> bool:
+    """True when the live stream is actually delivering frames, judged by
+    buffer-segment freshness rather than HA reachability (HA keeps reporting
+    'streaming' through a PetKit cloud stall)."""
+    age = newest_segment_age()
+    if age is None:
+        return False
+    return age <= get_settings().stream_stale_seconds
+
+
 def _cleanup_old() -> None:
     cutoff = datetime.now(tz()) - timedelta(seconds=get_settings().buffer_window_seconds)
     for f in buffer_dir().glob("*.mp4"):

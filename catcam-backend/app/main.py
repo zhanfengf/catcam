@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import autofeed, buffer, db, ha, highlights, recorder
+from . import autofeed, buffer, db, ha, highlights, recorder, streamwatch
 from .config import get_settings
 from .ratelimit import check_ip
 from .scheduling import build_status, day_start, now
@@ -26,7 +26,9 @@ async def lifespan(app: FastAPI):
     highlights.start()
     ha.start()
     autofeed.start()
+    streamwatch.start()
     yield
+    streamwatch.stop()
     autofeed.stop()
     ha.stop()
     recorder.stop()
@@ -77,6 +79,7 @@ async def status():
     body = build_status(last)
     body["fed_today"] = db.count_feeds_today(day_start(now()))
     body["ha_online"] = ha.is_online()
+    body["stream_online"] = streamwatch.is_online()
     body["announcement"] = db.get_announcement()
     body["auto_feed_windows"] = db.get_auto_feed_windows()
     if not body["ha_online"]:
@@ -85,6 +88,12 @@ async def status():
         # down right now
         body["can_feed"] = False
         body["reason"] = "ha_offline"
+    elif not body["stream_online"]:
+        # feeder itself is fine, but the camera stream has stalled (PetKit
+        # cloud WHEP drop). No point letting a public viewer feed when they
+        # can't actually see Roll Roll — mirror the ha_offline treatment.
+        body["can_feed"] = False
+        body["reason"] = "stream_offline"
     return body
 
 

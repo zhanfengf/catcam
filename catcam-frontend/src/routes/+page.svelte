@@ -37,6 +37,7 @@
       fedFallback: '餵咗喇！🐱',
       cantFeedFallback: '而家餵唔到',
       feederOffline: '🔌 餵食機離線',
+      streamOffline: '📷 直播中斷，暫時餵唔到',
       secretTitle: '秘密通道',
       secretSub: '輸入密碼解鎖管理工具',
       pwPlaceholder: '輸入密碼',
@@ -116,6 +117,7 @@
       fedFallback: 'Fed! 🐱',
       cantFeedFallback: "Can't feed right now",
       feederOffline: '🔌 Feeder Offline',
+      streamOffline: '📷 Stream down — can’t feed now',
       secretTitle: 'Secret Channel',
       secretSub: 'Enter password to unlock admin tools',
       pwPlaceholder: 'Password',
@@ -557,7 +559,9 @@
       ? t.feedBtnReady
       : status?.reason === 'ha_offline'
         ? t.feederOffline
-        : `${t.feedBtnReady} ${fmt(localSecs, t)}`.trim();
+        : status?.reason === 'stream_offline'
+          ? t.streamOffline
+          : `${t.feedBtnReady} ${fmt(localSecs, t)}`.trim();
 
   function initCamera() {
     if (!videoRtcEl) return;
