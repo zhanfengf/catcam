@@ -4,6 +4,15 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.17.0 — 每次訪客餵食推送 Telegram(時間+IP+國家+片URL)(2026-10-27)
+
+- `34d2992` Telegram alert per genuine web-visitor feed——每次**真網站訪客**餵食,片整好（~1 分鐘）後推一條去 Telegram:`🍚 有訪客餵咗 Roll Roll` + 🕐 時間 + 🌐 `IP · 國家` + 📹 片 URL。
+  - 點串：`/feed` 成功時用 `visitor_feed_pending` marker 記低 `{IP, cf-ipcountry 國家, 時間}`；recorder 偵測到對應出糧就 `pop_visitor_feed_pending` 認返個 marker，片整好（`set_feed_event_clip` 之後）由 `recorder._notify_visitor_feed` 推送。
+  - **只推真網站訪客**：得 `/feed` 會落 marker，PetKit app／機身掣／排程自動餵／admin 餵都冇 marker（亦冇 IP），所以唔會推。
+  - 國家用 **Cloudflare `cf-ipcountry` header**（只有國家級，冇外部 geo-IP，所以冇城市/區級如「屯門」）；片連結用 `public_base_url`。`notify_visitor_feeds=false` 可關。
+  - ⚠️ 私隱：IP 係個人資料，呢條推送只去 owner 自己私人 Telegram，純自己監控，唔好把 IP log 公開或入 repo。
+  - 驗證：經後端真正 `_notify_visitor_feed`（含 .env + IPv4 transport）發示範、Telegram 送達；片 URL 用真實檔名測到 `http=200 video/mp4`。`cf-ipcountry` 經 Cloudflare+Caddy 到後端（同已 work 嘅 `cf-connecting-ip` 同一機制），待第一次真實訪客餵食最終確認國家顯示。
+
 ## v0.16.2 — 首次訪客語言跟瀏覽器設定自動選(2026-10-27)
 
 - `fe2fe80` Default first-visit language from navigator.languages——之前新訪客**一律硬繁中**（`lang = localStorage || 'zh'`），冇睇地區冇睇瀏覽器語言。新增 `detectLang()` 睇 `navigator.languages`：任何 `zh*`（zh-HK/zh-TW/zh-CN…）→ 繁中,其餘 → 英文。優先次序 **localStorage 手動揀 > 瀏覽器語言 > fallback 繁中**，所以自動偵測淨係決定「第一次」睇邊種,撳過切換就永遠用返佢揀嘅。揀咗睇瀏覽器語言偏好而唔係 Geo-IP——反映訪客想睇乜語言（香港人部機設英文會見英文），而唔係佢人喺邊。純前端。

@@ -301,6 +301,27 @@ Set up:
 > until timeout. `notify.py` binds the socket to the IPv4 wildcard
 > (`local_address="0.0.0.0"`); from the shell use `curl -4`.
 
+### Visitor-feed alerts (Telegram)
+
+With the same Telegram credentials, each **genuine web-visitor feed** also
+pushes an alert once its clip is ready (~1 min later, so the link is live):
+
+```
+🍚 有訪客餵咗 Roll Roll
+🕐 2026-10-27 08:41
+🌐 203.0.113.45 · HK
+📹 https://cat.kelvinp.work/clips/2026-10-27_084100.mp4
+```
+
+How it's wired: `/feed` stashes the visitor's IP + country in a short-lived
+`visitor_feed_pending` marker; when the recorder sees the matching dispense it
+pops the marker and, once the clip finishes, `recorder._notify_visitor_feed`
+sends the alert. **Only site `/feed` sets that marker** — PetKit-app, physical
+button, scheduled auto-feed and admin feeds leave no marker (and have no IP),
+so none of them are pushed. Country is Cloudflare's own `cf-ipcountry` header
+(country-level only — no external geo-IP, so no city/district); the clip link
+is built off `public_base_url`. Turn off with `notify_visitor_feeds=false`.
+
 ## Announcement banner
 
 A free-text banner the owner can push to every visitor, shown once per
