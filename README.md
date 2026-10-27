@@ -54,18 +54,20 @@ The feed button reflects exactly one state at a time — `GET /status` returns
 | Cooldown running | `cooldown` | <img src="docs/screenshots/feed-cooldown.png" width="220" alt="Feed button showing cooldown countdown"> |
 | Outside open hours | `outside_hours` | <img src="docs/screenshots/feed-outside-hours.png" width="220" alt="Feed button showing time until open hours"> |
 | Feeder (Home Assistant) unreachable | `ha_offline` | <img src="docs/screenshots/feed-ha-offline.png" width="220" alt="Feed button disabled, feeder offline"> |
-| Live stream stalled | `stream_offline` | Feed button disabled — no point feeding a cat you can't see. Detected from buffer freshness (see below), independent of `ha_offline`. |
+| Live stream stalled | `stream_offline` | <img src="docs/screenshots/feed-stream-offline.png" width="220" alt="Feed button disabled, live stream stalled"> |
 
 `ha_offline` is detected server-side by a background poll against Home
 Assistant (independent of any feed attempt) — the button disables itself
 within ~15s of HA going down, instead of waiting for a visitor to hit it and
 get a 502.
 
-All screenshots above show a live camera frame — captured with
+All screenshots above except `stream_offline` show a live camera frame —
+captured with
 [`docs/screenshots/camera-live-reference.png`](docs/screenshots/camera-live-reference.png)
 kept as the canonical "online" reference frame, so any future re-capture of
 these screenshots reuses the same scene instead of whatever happens to be in
-frame at capture time.
+frame at capture time. `stream_offline` is the one state where there's no
+frame to show by definition — the screenshot captures the feeder mid-outage.
 
 Beside the live view (below it on mobile) is a read-only **feeding activity**
 feed. Every real dispense — from the site, the PetKit app, the physical
