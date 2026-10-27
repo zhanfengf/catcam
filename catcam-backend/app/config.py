@@ -68,6 +68,11 @@ class Settings(BaseSettings):
     # (this CT has no sudo); see deploy/go2rtc-restart.{path,service}
     go2rtc_restart_trigger: str = "./go2rtc-restart.trigger"
 
+    # optional Telegram push for stream outage/recovery alerts; both empty =
+    # notifications off (the watchdog still detects + auto-recovers silently)
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+
     @property
     def open_t(self) -> time:
         return _parse_hhmm(self.open_time)
