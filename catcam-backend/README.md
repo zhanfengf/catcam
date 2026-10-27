@@ -278,6 +278,29 @@ a root-run systemd **path unit** (`deploy/go2rtc-restart.path` →
 go2rtc`. So `catcam` gains exactly one capability — restart go2rtc — and no
 general root. Install steps are in the header of `go2rtc-restart.path`.
 
+### Outage alerts (Telegram)
+
+Optional push notifications (`app/notify.py`): streamwatch fires **one**
+`🔴 直播斷咗` message once an outage is sustained (after
+`stream_recover_after_seconds`, so a brief hiccup never pings) and a
+`🟢 復原咗` message with the outage duration when it returns. Fire-and-forget
+so the watch loop never blocks on Telegram, and a complete no-op when the
+credentials aren't set — the watchdog still detects + auto-recovers silently.
+
+Set up:
+
+1. In Telegram, message **@BotFather** → `/newbot` → copy the bot **token**.
+2. Open your new bot and send it any message (a bot can't message a user who
+   hasn't talked to it first).
+3. `curl https://api.telegram.org/bot<TOKEN>/getUpdates` and read
+   `result[].message.chat.id` — that's your **chat id**.
+4. Put both in `.env`: `TELEGRAM_BOT_TOKEN=…`, `TELEGRAM_CHAT_ID=…`, restart.
+
+> **Gotcha — force IPv4:** CT 114 resolves `api.telegram.org` to an IPv6
+> address but has no IPv6 route, so a default client (and plain `curl`) hangs
+> until timeout. `notify.py` binds the socket to the IPv4 wildcard
+> (`local_address="0.0.0.0"`); from the shell use `curl -4`.
+
 ## Announcement banner
 
 A free-text banner the owner can push to every visitor, shown once per
