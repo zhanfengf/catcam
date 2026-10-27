@@ -54,6 +54,7 @@ The feed button reflects exactly one state at a time — `GET /status` returns
 | Cooldown running | `cooldown` | <img src="docs/screenshots/feed-cooldown.png" width="220" alt="Feed button showing cooldown countdown"> |
 | Outside open hours | `outside_hours` | <img src="docs/screenshots/feed-outside-hours.png" width="220" alt="Feed button showing time until open hours"> |
 | Feeder (Home Assistant) unreachable | `ha_offline` | <img src="docs/screenshots/feed-ha-offline.png" width="220" alt="Feed button disabled, feeder offline"> |
+| Live stream stalled | `stream_offline` | Feed button disabled — no point feeding a cat you can't see. Detected from buffer freshness (see below), independent of `ha_offline`. |
 
 `ha_offline` is detected server-side by a background poll against Home
 Assistant (independent of any feed attempt) — the button disables itself
@@ -109,6 +110,15 @@ A fully-local, cloud-free path is *possible* but not built in — it needs a
 community reverse-engineering project (e.g. `petkit-local` / LocalKit) that
 re-provisions the device to a local stand-in server. That migration is tracked
 as a separate project plan, not part of this repo.
+
+Because those drops happen, the backend runs a **stream watchdog**. It judges
+liveness off the 24/7 pre-roll buffer's segment freshness — not HA
+reachability, since HA keeps reporting `streaming` right through a cloud stall.
+When frames stop flowing it (a) sets `/status` `stream_online: false` so the
+public feed button disables (`reason: stream_offline`), and (b) after a
+sustained outage auto-runs the same recovery a human would — reload the PetKit
+integration, restart go2rtc — rate-limited so a genuine cloud outage isn't
+hammered.
 
 ## Tech stack
 

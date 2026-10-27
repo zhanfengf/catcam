@@ -26,7 +26,7 @@ service — the Home Assistant token stays here, never in the browser.
 
 | Method | Path             | Purpose                                                |
 | ------ | ---------------- | ------------------------------------------------------- |
-| GET    | `/status`             | Can we feed now? next feed time, window, visitor fed-today count, `ha_online`, `announcement`, `auto_feed_windows`. |
+| GET    | `/status`             | Can we feed now? next feed time, window, visitor fed-today count, `ha_online`, `stream_online`, `announcement`, `auto_feed_windows`. |
 | POST   | `/feed`               | Try to feed. Enforces all rules, then calls HA.          |
 | POST   | `/admin/feed`         | HMAC-signed bypass (cooldown + open hours) for the owner only. |
 | POST   | `/admin/feed-test`    | HMAC-signed. Dispenses for real (tests the pipeline end to end) but excluded from the public cooldown and the "訪客餵食咗" count. |
@@ -242,6 +242,41 @@ unreachable, instead of a visitor hitting the button and only then getting a
 `502`. A real HA outage also takes down the camera feed (go2rtc's upstream
 WHEP pull goes through HA too), so both go dark together — see the
 `feed-ha-offline.png` screenshot in the root README.
+
+## Stream watchdog (stream_offline + auto-recovery)
+
+`ha_online` only answers "is HA reachable" — but the common failure here is
+the opposite: HA stays up and keeps reporting the camera as `streaming` while
+the **PetKit cloud WHEP session silently drops** and no frames flow. `app/
+streamwatch.py` closes that gap with a separate liveness signal.
+
+It judges liveness off the **24/7 pre-roll buffer** (`app/buffer.py`): that
+ffmpeg writes a data-bearing `~5s` segment continuously while frames flow, so
+`stream_online()` is just "is the newest segment above a byte floor *and* its
+mtime fresh (`< stream_stale_seconds`, default 30s)". The byte floor matters —
+when go2rtc is up but starved, its ffmpeg reconnects and churns near-empty
+segments with fresh mtimes; counting those would falsely read "online", so
+anything under `buffer_min_segment_bytes` (20KB) doesn't count.
+
+`GET /status` returns `stream_online`; when the feeder is fine but the stream
+is stalled, `can_feed`/`reason` are overridden to `false`/`"stream_offline"`
+(layered *after* the `ha_offline` check), so the public feed button disables —
+no point feeding a cat nobody can see.
+
+A background loop (every 15s) also **auto-recovers**: after an outage lasts
+`stream_recover_after_seconds` (default 75s) it runs the same sequence as
+`scripts/fix-catcam-stream.sh` in the my-homelab skill — reload the PetKit
+integration (`ha.reload_petkit()`), wait, restart go2rtc — then waits
+`stream_recover_cooldown_seconds` (default 300s) before trying again so a
+genuine cloud outage isn't hammered. Set `stream_auto_recover=false` to leave
+it detect-only.
+
+**go2rtc restart without sudo:** this CT has no `sudo`. Instead the backend
+(running as the unprivileged `catcam` user) `touch`es a trigger file it owns;
+a root-run systemd **path unit** (`deploy/go2rtc-restart.path` →
+`deploy/go2rtc-restart.service`) watches that file and runs `systemctl restart
+go2rtc`. So `catcam` gains exactly one capability — restart go2rtc — and no
+general root. Install steps are in the header of `go2rtc-restart.path`.
 
 ## Announcement banner
 

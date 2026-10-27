@@ -4,6 +4,15 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.15.0 — 斷流時自動 disable 餵食掣 + 背景自動修復(2026-10-27)
+
+- `ec66402` Disable feeding + auto-recover on live-stream outage——補返一個大盲點:之前 `ha_offline` 淨係 ping HA `/api/` 睇 HA 本身通唔通,但最常見嗰種斷流係**PetKit 雲端 WHEP session 靜靜雞斷咗、HA 仍然報 `streaming`**,所以餵食掣照開、但畫面係黑嘅。
+  - **偵測**:新 `app/streamwatch.py` 用 24/7 pre-roll buffer 嘅片段新鮮度判斷真係有冇畫面(`buffer.stream_online()`:最新片段要大過 byte floor `buffer_min_segment_bytes`=20KB **而且** mtime 喺 `stream_stale_seconds`=30s 內)。個 byte floor 係特登加——go2rtc up 但收唔到畫面嗰陣,ffmpeg 會不停重連、churn 出近乎空嘅片段仲帶住新 mtime,唔篩走就會假報「正常」。
+  - **效果(凱雯要嘅)**:`GET /status` 加 `stream_online`;餵食機正常但串流斷咗嗰陣,`can_feed`/`reason` 覆寫做 `false`/`stream_offline`(排喺 `ha_offline` 之後),公開餵食掣 disable 兼顯示「📷 直播中斷,暫時餵唔到」——睇唔到隻貓就唔好餵。
+  - **自動修復**:背景 loop(每 15s)喺斷流持續 `stream_recover_after_seconds`=75s 後,自動跑同 `fix-catcam-stream.sh` 一樣嘅次序——reload PetKit integration(`ha.reload_petkit()`)→ 等 → 重啟 go2rtc,之後 `stream_recover_cooldown_seconds`=300s 內唔再試,免得狂 query PetKit 雲。`stream_auto_recover=false` 可以淨做偵測唔自動修。
+  - **重啟 go2rtc 唔使 sudo**:呢個 CT 冇 `sudo`。改用 systemd **path unit**(`deploy/go2rtc-restart.{path,service}`,root 跑)watch 一個 catcam 擁有嘅 trigger 檔;後端(非特權 `catcam` user)`touch` 個檔就會觸發 `systemctl restart go2rtc`。即係 catcam 淨係多咗「重啟 go2rtc」呢一粒能力,冇攞到任何其他 root 權。
+  - 純後端 + 前端 + 兩個新 systemd unit;已 deploy 落 CT 114,真實停 go2rtc 測過 `reason` 翻 `stream_offline`、trigger 觸發 go2rtc 重啟都驗證過。
+
 ## v0.14.2 — 保留原生控制列,只隱藏直播嗰條閃動進度條(2026-10-27)
 
 - `e07f655` Keep native video controls, hide only the live timeline scrubber——參考對方嘅做法:**保留原生 `<video>` 控制列**(播放/暫停、時間、靜音、全螢幕、⋮ PiP),**只隱藏嗰條 timeline 進度條**——因為 live MSE 串流冇真實時長,就係嗰條 bar 會喺 hover 時不停 reset、睇落似 reload。喺 `CatCamVideo` subclass 嘅 `oninit` 畀 video 加一個 `live-cam` class(唔再 set `controls=false`),全域 `app.css` 用 `video.live-cam::-webkit-media-controls-timeline { display:none }` 隱藏進度條(放全域而唔用 Svelte scoped,因為 scoped `:global` 喺 `::-webkit` pseudo-element 唔生效;用 class 限定只影響直播,錄影 lightbox 嘅進度條保留)。同時撤走咗中途試過嘅「關晒 controls + 自製全螢幕/PiP 掣」做法。純前端。

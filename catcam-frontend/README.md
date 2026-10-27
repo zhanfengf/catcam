@@ -59,9 +59,15 @@ Token 存喺 `localStorage`，唔會傳明文密碼。
 ## 餵貓掣狀態 + 公告彈窗
 
 `GET /status` 嘅 `can_feed` + `reason` 決定餵貓掣顯示乜(`ok` / `cooldown` /
-`outside_hours` / `ha_offline`)——`ha_offline` 係後端獨立背景 poll 緊 HA
-嘅結果,同鏡頭個 LIVE/離線 badge(`cameraConnected`,睇 WebSocket 連線狀態)
-係兩件完全唔同嘅嘢,唔好搞混。四種狀態嘅截圖喺根目錄 README。
+`outside_hours` / `ha_offline` / `stream_offline`)——`ha_offline` 係後端獨立
+背景 poll 緊 HA 嘅結果,同鏡頭個 LIVE/離線 badge(`cameraConnected`,睇
+WebSocket 連線狀態)係兩件完全唔同嘅嘢,唔好搞混。狀態截圖喺根目錄 README。
+
+`stream_offline` 係後端「串流看門狗」嘅判斷:PetKit 雲端 WHEP 斷流時,HA 仍然
+報 `streaming`,所以淨靠 `ha_offline` 捉唔到——後端改為睇 24/7 buffer 有冇
+新鮮片段嚟判斷真係有冇畫面,冇畫面時 `can_feed` 變 `false`、`reason` 做
+`stream_offline`,餵貓掣 disable 兼顯示「📷 直播中斷,暫時餵唔到」(睇唔到隻貓
+就唔好餵)。詳見 `catcam-backend/README.md` 嘅 Stream watchdog 一節。
 
 公告彈窗(`status.announcement`)一入站有內容就自動彈出,用返同秘密通道
 登入 modal 一樣嘅 `.modal`/`.modal-backdrop` 樣式。撳右上角 ✕ 關閉會將
