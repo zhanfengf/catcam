@@ -55,6 +55,7 @@ The feed button reflects exactly one state at a time — `GET /status` returns
 | Outside open hours | `outside_hours` | <img src="docs/screenshots/feed-outside-hours.png" width="220" alt="Feed button showing time until open hours"> |
 | Feeder (Home Assistant) unreachable | `ha_offline` | <img src="docs/screenshots/feed-ha-offline.png" width="220" alt="Feed button disabled, feeder offline"> |
 | Live stream stalled | `stream_offline` | <img src="docs/screenshots/feed-stream-offline.png" width="220" alt="Feed button disabled, live stream stalled"> |
+| Admin paused feeding ("fasting mode") | `fasting` | Feed button disabled; a themed banner overlays the live view. Highest-priority reason — overrides `ha_offline`/`stream_offline` even if both are also true, since it's a deliberate choice rather than an outage. |
 
 `ha_offline` is detected server-side by a background poll against Home
 Assistant (independent of any feed attempt) — the button disables itself
@@ -85,6 +86,24 @@ cooldown or stats, an announcement banner, auto-feed safety-net windows
 PetKit-side dispense history:
 
 <img src="docs/screenshots/admin-panel.png" width="260" alt="Admin panel: force feed, simulated test feed, announcement banner, auto-feed windows, and today's PetKit feed history">
+
+**Fasting mode** (same admin panel) is a toggle, not just a UI skin — turning
+it on also **pauses the auto-feed safety-net windows**. Those windows
+dispense on their own (`autofeed.py`'s loop calls Home Assistant directly,
+with no public request involved), so without this check they'd quietly
+override the whole point of pausing feeding. The check is a plain early
+`return` at the top of `_check_once()`, and deliberately leaves that cycle's
+windows unmarked (not "handled") — clearing fasting while still inside the
+auto-feed grace period lets the very next tick catch up and feed normally,
+instead of silently skipping it for the day.
+
+Fasting mode does **not** touch the shared cooldown — `last_fed_at` and the
+`fasting` flag are two independent pieces of state. Starting a fast mid-
+cooldown doesn't reset or extend the timer, and clearing it doesn't grant an
+immediate feed if cooldown hasn't actually elapsed; `/status` just reports
+whatever `reason` the cooldown math already produces once `fasting` is back
+to `false` (`ok` if cooldown finished during the fast, `cooldown` with
+however much time is actually left if it hadn't).
 
 ## Camera streaming (and why it goes through the cloud)
 

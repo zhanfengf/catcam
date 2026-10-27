@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import hmac
+import logging
 import time as time_module
 from contextlib import asynccontextmanager
 
@@ -13,6 +14,11 @@ from .config import get_settings
 from .ratelimit import check_ip
 from .scheduling import build_status, day_start, now
 
+# Without this, every module's `log.info(...)` (streamwatch's auto-recovery
+# trail, in particular) is silently dropped — Python's root logger defaults
+# to WARNING with no handler attached, so journalctl only ever shows uvicorn's
+# own access/error lines, never the app's own INFO breadcrumbs.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 _feed_lock = asyncio.Lock()
 
@@ -82,7 +88,17 @@ async def status():
     body["stream_online"] = streamwatch.is_online()
     body["announcement"] = db.get_announcement()
     body["auto_feed_windows"] = db.get_auto_feed_windows()
-    if not body["ha_online"]:
+    fasting = db.get_fasting()
+    body["fasting"] = fasting["active"]
+    body["fasting_reason"] = fasting["reason"]
+    if fasting["active"]:
+        # admin-initiated fast overrides every other reason — it's a
+        # deliberate decision, not an outage, so a visitor should see "Roll
+        # Roll is on a diet" rather than an unrelated ha_offline/stream_offline
+        # message that happens to also be true at the same moment
+        body["can_feed"] = False
+        body["reason"] = "fasting"
+    elif not body["ha_online"]:
         # HA unreachable overrides the time/cooldown-based reason — no point
         # telling a visitor "try again in 5 min" when the feeder itself is
         # down right now
@@ -257,6 +273,61 @@ async def admin_set_announcement(request: Request):
     db.set_announcement(text, now())
 
     return {"ok": True, "announcement": text}
+
+
+@app.post("/admin/fasting")
+async def admin_set_fasting(request: Request):
+    ip = client_ip(request)
+
+    if not check_ip(ip):
+        return JSONResponse(
+            status_code=429,
+            content={"ok": False, "reason": "too_many_requests",
+                     "message": "撳得太密啦，唞一唞先"},
+        )
+
+    timestamp = request.headers.get("x-admin-timestamp", "")
+    signature = request.headers.get("x-admin-signature", "")
+    if not verify_admin_signature("POST", "/admin/fasting", timestamp, signature):
+        return JSONResponse(
+            status_code=403,
+            content={"ok": False, "reason": "unauthorized",
+                     "message": "密碼唔啱或者已過期"},
+        )
+
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    reason = str(body.get("reason") or "").strip()[:200]
+    db.set_fasting(True, reason)
+
+    return {"ok": True, "fasting": True, "fasting_reason": reason}
+
+
+@app.post("/admin/fasting/clear")
+async def admin_clear_fasting(request: Request):
+    ip = client_ip(request)
+
+    if not check_ip(ip):
+        return JSONResponse(
+            status_code=429,
+            content={"ok": False, "reason": "too_many_requests",
+                     "message": "撳得太密啦，唞一唞先"},
+        )
+
+    timestamp = request.headers.get("x-admin-timestamp", "")
+    signature = request.headers.get("x-admin-signature", "")
+    if not verify_admin_signature("POST", "/admin/fasting/clear", timestamp, signature):
+        return JSONResponse(
+            status_code=403,
+            content={"ok": False, "reason": "unauthorized",
+                     "message": "密碼唔啱或者已過期"},
+        )
+
+    db.set_fasting(False, "")
+
+    return {"ok": True, "fasting": False}
 
 
 @app.post("/admin/auto-feed")

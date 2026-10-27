@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy, afterUpdate } from 'svelte';
   import '../app.css';
-  import { getStatus, feed, adminFeed, adminFeedTest, adminSetAnnouncement, adminSetAutoFeed, adminHistory, getRecordings, getActivity } from '$lib/api.js';
+  import { getStatus, feed, adminFeed, adminFeedTest, adminSetAnnouncement, adminSetAutoFeed, adminSetFasting, adminClearFasting, adminHistory, getRecordings, getActivity } from '$lib/api.js';
   import { VideoRTC } from '$lib/video-rtc.js';
 
   const ADMIN_TOKEN_KEY = 'catcam_admin_token';
@@ -38,6 +38,16 @@
       cantFeedFallback: '而家餵唔到',
       feederOffline: '🔌 餵食機離線',
       streamOffline: '📷 直播中斷，暫時餵唔到',
+      fastingBtn: '🍽️ Roll Roll 節食緊，暫時唔餵得',
+      fastingSectionTitle: '🍽️ 節食模式',
+      fastingStartBtn: '開始節食',
+      fastingStarting: '設定緊…',
+      fastingStarted: '節食模式已開啟！🍽️',
+      fastingStartFail: '設定失敗',
+      fastingClearBtn: '🍚 還原餵食',
+      fastingClearing: '還原緊…',
+      fastingCleared: '已還原餵食！🍚',
+      fastingClearFail: '還原失敗',
       secretTitle: '秘密通道',
       secretSub: '輸入密碼解鎖管理工具',
       pwPlaceholder: '輸入密碼',
@@ -118,6 +128,16 @@
       cantFeedFallback: "Can't feed right now",
       feederOffline: '🔌 Feeder Offline',
       streamOffline: '📷 Stream down — can’t feed now',
+      fastingBtn: '🍽️ Roll Roll is fasting — feeding paused',
+      fastingSectionTitle: '🍽️ Fasting Mode',
+      fastingStartBtn: 'Start Fasting',
+      fastingStarting: 'Setting…',
+      fastingStarted: 'Fasting mode on! 🍽️',
+      fastingStartFail: 'Failed to set',
+      fastingClearBtn: '🍚 Resume Feeding',
+      fastingClearing: 'Resuming…',
+      fastingCleared: 'Feeding resumed! 🍚',
+      fastingClearFail: 'Failed to resume',
       secretTitle: 'Secret Channel',
       secretSub: 'Enter password to unlock admin tools',
       pwPlaceholder: 'Password',
@@ -278,6 +298,8 @@
   let savingAnnouncement = false;
   let autoFeedDraft = null;
   let savingAutoFeed = false;
+  let startingFasting = false;
+  let clearingFasting = false;
 
   async function refresh() {
     try {
@@ -562,16 +584,50 @@
     await refresh();
   }
 
+  async function onStartFasting() {
+    if (startingFasting || !adminToken) return;
+    startingFasting = true;
+    const { httpOk, data } = await adminSetFasting(adminToken, '');
+    startingFasting = false;
+    if (httpOk && data.ok) {
+      showToast('ok', t.fastingStarted);
+    } else {
+      showToast('err', data.message || t.fastingStartFail);
+      if (data.reason === 'unauthorized') {
+        lockAdmin();
+      }
+    }
+    await refresh();
+  }
+
+  async function onClearFasting() {
+    if (clearingFasting || !adminToken) return;
+    clearingFasting = true;
+    const { httpOk, data } = await adminClearFasting(adminToken);
+    clearingFasting = false;
+    if (httpOk && data.ok) {
+      showToast('ok', t.fastingCleared);
+    } else {
+      showToast('err', data.message || t.fastingClearFail);
+      if (data.reason === 'unauthorized') {
+        lockAdmin();
+      }
+    }
+    await refresh();
+  }
+
   $: canFeed = status?.can_feed;
   $: btnLabel = feeding
     ? t.feedBtnFeeding
     : canFeed
       ? t.feedBtnReady
-      : status?.reason === 'ha_offline'
-        ? t.feederOffline
-        : status?.reason === 'stream_offline'
-          ? t.streamOffline
-          : `${t.feedBtnReady} ${fmt(localSecs, t)}`.trim();
+      : status?.reason === 'fasting'
+        ? t.fastingBtn
+        : status?.reason === 'ha_offline'
+          ? t.feederOffline
+          : status?.reason === 'stream_offline'
+            ? t.streamOffline
+            : `${t.feedBtnReady} ${fmt(localSecs, t)}`.trim();
 
   function initCamera() {
     if (!videoRtcEl) return;
@@ -684,6 +740,9 @@
         <video-rtc class="stage-cam" bind:this={videoRtcEl}></video-rtc>
         <button class="stage-refresh" on:click={refreshCamera} aria-label={t.refreshLabel}>↻</button>
         <div class="stage-watermark">cat.kelvinp.work</div>
+        {#if status?.reason === 'fasting'}
+          <img class="fasting-overlay" src="/fasting-overlay.jpg" alt="節食事態 — Roll Roll 暫停餵食中" />
+        {/if}
         <button
           class="stage-feed-btn"
           class:ready={canFeed}
@@ -791,6 +850,18 @@
         ></textarea>
         <button class="admin-btn" disabled={savingAutoFeed} on:click={onSaveAutoFeed}>
           {savingAutoFeed ? t.autoFeedSaving : t.autoFeedSaveBtn}
+        </button>
+      </div>
+
+      <div class="history">
+        <div class="history-head">
+          <div class="history-title">{t.fastingSectionTitle}</div>
+        </div>
+        <button class="admin-btn" disabled={startingFasting} on:click={onStartFasting}>
+          {startingFasting ? t.fastingStarting : t.fastingStartBtn}
+        </button>
+        <button class="admin-btn fasting-clear-btn" disabled={clearingFasting} on:click={onClearFasting}>
+          {clearingFasting ? t.fastingClearing : t.fastingClearBtn}
         </button>
       </div>
 
@@ -1215,6 +1286,31 @@
   }
   .stage-feed-btn.ready:disabled {
     opacity: 0.7;
+  }
+  /* admin-supplied static banner (not a copyrighted asset — a Gemini-generated
+     recreation of the EVA-"非常事態" poster style), centred over the stage
+     at 1.5x the original quarter-size, semi-transparent, while fasting mode
+     is on */
+  .fasting-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 75%;
+    height: 75%;
+    min-width: 220px;
+    min-height: 160px;
+    object-fit: contain;
+    opacity: 0.55;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  .fasting-clear-btn {
+    margin-top: 6px;
+    background: var(--bg-soft);
+    color: var(--text);
+    border: 1px solid var(--line);
   }
 
   .action {

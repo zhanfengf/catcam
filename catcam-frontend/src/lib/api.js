@@ -122,6 +122,44 @@ export async function adminSetAutoFeed(token, windows) {
   return { httpOk: r.ok, status: r.status, data };
 }
 
+export async function adminSetFasting(token, reason) {
+  const { timestamp, signature } = await signAdminRequest(token, 'POST', '/admin/fasting');
+  const r = await fetch(`${API_BASE}/admin/fasting`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Admin-Timestamp': timestamp,
+      'X-Admin-Signature': signature
+    },
+    body: JSON.stringify({ reason })
+  });
+  let data = {};
+  try {
+    data = await r.json();
+  } catch (e) {
+
+  }
+  return { httpOk: r.ok, status: r.status, data };
+}
+
+export async function adminClearFasting(token) {
+  const { timestamp, signature } = await signAdminRequest(token, 'POST', '/admin/fasting/clear');
+  const r = await fetch(`${API_BASE}/admin/fasting/clear`, {
+    method: 'POST',
+    headers: {
+      'X-Admin-Timestamp': timestamp,
+      'X-Admin-Signature': signature
+    }
+  });
+  let data = {};
+  try {
+    data = await r.json();
+  } catch (e) {
+
+  }
+  return { httpOk: r.ok, status: r.status, data };
+}
+
 export async function adminHistory(token) {
   const { timestamp, signature } = await signAdminRequest(token, 'GET', '/admin/history');
   const r = await fetch(`${API_BASE}/admin/history`, {

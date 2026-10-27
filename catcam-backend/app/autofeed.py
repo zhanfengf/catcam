@@ -34,6 +34,13 @@ async def _check_once() -> None:
     windows = db.get_auto_feed_windows()
     if not windows:
         return
+    if db.get_fasting()["active"]:
+        # admin-initiated fast pauses the auto-feed safety net too — it'd
+        # otherwise dispense regardless, defeating the point of fasting mode.
+        # Windows are deliberately left unhandled (not marked done) so that
+        # if fasting clears while still within _GRACE_MINUTES, the next tick
+        # catches up and feeds normally instead of silently skipping it.
+        return
 
     n = now()
     today = n.date().isoformat()

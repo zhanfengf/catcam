@@ -116,6 +116,18 @@ def set_announcement(text: str, created_at: datetime) -> None:
         conn.commit()
 
 
+def get_fasting() -> dict:
+    try:
+        data = json.loads(_get_state("fasting", '{"active": false, "reason": ""}'))
+    except ValueError:
+        return {"active": False, "reason": ""}
+    return {"active": bool(data.get("active")), "reason": str(data.get("reason") or "")}
+
+
+def set_fasting(active: bool, reason: str = "") -> None:
+    _set_state("fasting", json.dumps({"active": active, "reason": reason}))
+
+
 def get_announcement_log(limit: int = 20) -> list[dict]:
     with _lock:
         rows = _db().execute(
