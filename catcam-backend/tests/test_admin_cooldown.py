@@ -70,6 +70,29 @@ class AdminCooldownDbTests(unittest.TestCase):
         self.assertEqual((source, note, visitor), ("admin", None, None))
         pop_visitor.assert_not_called()
 
+    def test_wet_food_resets_cooldown_but_not_visitor_count(self):
+        visitor = datetime(2026, 10, 29, 7, 5, tzinfo=HK)
+        wet_food = visitor + timedelta(minutes=30)
+
+        db.record_feed(visitor, "visitor", 10)
+        db.record_feed(
+            wet_food,
+            "admin_wet_food:owner",
+            None,
+            source="admin_wet_food",
+        )
+        db.add_feed_event(wet_food, source="admin_wet_food")
+
+        self.assertEqual(db.get_last_fed_at(), wet_food)
+        self.assertEqual(db.count_feeds_today(visitor.replace(hour=0, minute=0)), 1)
+        self.assertEqual(db.get_feed_events(visitor)[0], {
+            "fed_at": wet_food.isoformat(),
+            "clip": None,
+            "clip_ready_at": None,
+            "source": "admin_wet_food",
+            "note": None,
+        })
+
 
 class AdminEndpointTests(unittest.IsolatedAsyncioTestCase):
     async def test_force_feed_marks_window_and_returns_fresh_cooldown(self):
@@ -99,6 +122,42 @@ class AdminEndpointTests(unittest.IsolatedAsyncioTestCase):
         record_feed.assert_called_once_with(forced, "admin:203.0.113.4", 10, source="admin")
         set_admin_pending.assert_called_once_with(forced)
         mark_covered.assert_called_once_with(forced)
+        self.assertEqual(result["seconds_until_next"], 7200)
+
+    async def test_wet_food_logs_event_without_dispensing_and_covers_window(self):
+        fed_at = datetime(2026, 10, 29, 7, 15, tzinfo=HK)
+        request = Request({
+            "type": "http",
+            "method": "POST",
+            "path": "/admin/wet-food",
+            "headers": [],
+            "client": ("203.0.113.4", 12345),
+        })
+        status = {"can_feed": False, "reason": "cooldown", "seconds_until_next": 7200}
+
+        with (
+            patch.object(main, "check_ip", return_value=True),
+            patch.object(main, "verify_admin_signature", return_value=True),
+            patch.object(main, "now", return_value=fed_at),
+            patch.object(main.ha, "dispense", new_callable=AsyncMock) as dispense,
+            patch.object(main.db, "record_feed") as record_feed,
+            patch.object(main.db, "add_feed_event") as add_feed_event,
+            patch.object(main.autofeed, "mark_windows_covered") as mark_covered,
+            patch.object(main.db, "get_last_fed_at", return_value=fed_at),
+            patch.object(main, "build_status", return_value=status),
+        ):
+            result = await main.admin_wet_food(request)
+
+        dispense.assert_not_awaited()
+        record_feed.assert_called_once_with(
+            fed_at,
+            "admin_wet_food:203.0.113.4",
+            None,
+            source="admin_wet_food",
+        )
+        add_feed_event.assert_called_once_with(fed_at, source="admin_wet_food")
+        mark_covered.assert_called_once_with(fed_at)
+        self.assertEqual(result["fed_at"], fed_at.isoformat())
         self.assertEqual(result["seconds_until_next"], 7200)
 
 

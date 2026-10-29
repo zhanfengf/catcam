@@ -82,6 +82,24 @@ export async function adminFeedTest(token) {
   return { httpOk: r.ok, status: r.status, data };
 }
 
+export async function adminWetFood(token) {
+  const { timestamp, signature } = await signAdminRequest(token, 'POST', '/admin/wet-food');
+  const r = await fetch(`${API_BASE}/admin/wet-food`, {
+    method: 'POST',
+    headers: {
+      'X-Admin-Timestamp': timestamp,
+      'X-Admin-Signature': signature
+    }
+  });
+  let data = {};
+  try {
+    data = await r.json();
+  } catch (e) {
+
+  }
+  return { httpOk: r.ok, status: r.status, data };
+}
+
 export async function adminSetAnnouncement(token, text) {
   const { timestamp, signature } = await signAdminRequest(token, 'POST', '/admin/announcement');
   const r = await fetch(`${API_BASE}/admin/announcement`, {

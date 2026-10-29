@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy, afterUpdate } from 'svelte';
   import '../app.css';
-  import { getStatus, feed, adminFeed, adminFeedTest, adminSetAnnouncement, adminSetAutoFeed, adminSetFasting, adminClearFasting, adminHistory, getRecordings, getActivity } from '$lib/api.js';
+  import { getStatus, feed, adminFeed, adminFeedTest, adminWetFood, adminSetAnnouncement, adminSetAutoFeed, adminSetFasting, adminClearFasting, adminHistory, getRecordings, getActivity } from '$lib/api.js';
   import { VideoRTC } from '$lib/video-rtc.js';
 
   const ADMIN_TOKEN_KEY = 'catcam_admin_token';
@@ -60,6 +60,9 @@
       adminTestReady: '🧪 模擬訪客出糧（唔計統計）',
       adminTestFeeding: '模擬出糧緊…',
       adminTestFallback: '模擬出糧完成，冇影響真實統計！🧪🐱',
+      wetFoodReady: '🥫 餵罐罐（唔出乾糧）',
+      wetFoodFeeding: '記錄罐罐緊…',
+      wetFoodFallback: '記低咗今餐罐罐！🥫🐱',
       announcementSectionTitle: '📢 公告欄',
       announcementPlaceholder: '輸入公告內容，留空即係唔顯示',
       announcementSaveBtn: '儲存公告',
@@ -150,6 +153,9 @@
       adminTestReady: '🧪 Simulate Visitor Feed (not counted)',
       adminTestFeeding: 'Simulating feed…',
       adminTestFallback: 'Simulated feed done, no effect on real stats! 🧪🐱',
+      wetFoodReady: '🥫 Feed Wet Food (no kibble)',
+      wetFoodFeeding: 'Logging wet food…',
+      wetFoodFallback: 'Wet-food meal logged! 🥫🐱',
       announcementSectionTitle: '📢 Announcement',
       announcementPlaceholder: 'Announcement text, leave empty to hide it',
       announcementSaveBtn: 'Save announcement',
@@ -288,6 +294,7 @@
   let adminToken = null;
   let adminFeeding = false;
   let adminTesting = false;
+  let wetFoodFeeding = false;
   let history = null;
   let historyLoading = false;
   let historyError = false;
@@ -385,9 +392,10 @@
   }
 
   // every real dispense (site/app/physical/auto) lands one feed_event, with
-  // its clip filled in ~1 min later once the recording renders. activityLoading
-  // only gates the very first load; later polls refresh in place without
-  // flashing the loading state over an already-populated feed
+  // its clip filled in ~1 min later once the recording renders. an owner wet-
+  // food meal is inserted directly with source=admin_wet_food and deliberately
+  // has no clip. activityLoading only gates the very first load; later polls
+  // refresh in place without flashing over an already-populated feed
   async function loadActivity() {
     if (activity === null) activityLoading = true;
     try {
@@ -408,7 +416,13 @@
     .flatMap((e) => {
       // "錄影整緊…" only while the clip hasn't landed — once it has, the
       // separate "clip ready" line carries the link and the fed line is plain
-      const lines = [{ kind: 'fed', at: e.fed_at, pending: !e.clip, source: e.source, note: e.note }];
+      const lines = [{
+        kind: 'fed',
+        at: e.fed_at,
+        pending: !e.clip && e.source !== 'admin_wet_food',
+        source: e.source,
+        note: e.note
+      }];
       if (e.clip) {
         lines.push({ kind: 'clip', at: e.clip_ready_at || e.fed_at, clip: e.clip });
       }
@@ -517,6 +531,25 @@
     }
     await refresh();
     if (adminToken) loadHistory();
+  }
+
+  async function onWetFood() {
+    if (wetFoodFeeding || !adminToken) return;
+    wetFoodFeeding = true;
+    const { httpOk, data } = await adminWetFood(adminToken);
+    wetFoodFeeding = false;
+    if (httpOk && data.ok) {
+      showToast('ok', data.message || t.wetFoodFallback);
+      // The backend inserts feed_event synchronously, so refresh the public
+      // activity immediately instead of waiting for its 30-second poll.
+      await loadActivity();
+    } else {
+      showToast('err', data.message || t.wrongPwFallback);
+      if (data.reason === 'unauthorized') {
+        lockAdmin();
+      }
+    }
+    await refresh();
   }
 
   // pops up once per distinct announcement text — dismissing stores that
@@ -820,6 +853,9 @@
       </button>
       <button class="admin-btn" disabled={adminTesting} on:click={onAdminFeedTest}>
         {adminTesting ? t.adminTestFeeding : t.adminTestReady}
+      </button>
+      <button class="admin-btn" disabled={wetFoodFeeding} on:click={onWetFood}>
+        {wetFoodFeeding ? t.wetFoodFeeding : t.wetFoodReady}
       </button>
 
       <div class="history">

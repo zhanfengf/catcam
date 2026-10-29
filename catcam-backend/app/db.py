@@ -70,7 +70,12 @@ def get_last_fed_at() -> datetime | None:
     return datetime.fromisoformat(row[0])
 
 
-def record_feed(fed_at: datetime, ip: str | None, amount: int, source: str = "public") -> None:
+def record_feed(
+    fed_at: datetime,
+    ip: str | None,
+    amount: int | None,
+    source: str = "public",
+) -> None:
     with _lock:
         conn = _db()
         if source != "admin_test":
@@ -315,7 +320,7 @@ def count_feeds_today(day_start: datetime) -> int:
         row = _db().execute(
             "SELECT COUNT(*) FROM feed_log WHERE fed_at >= ? "
             "AND (ip IS NULL OR (ip NOT LIKE 'admin:%' AND ip NOT LIKE 'admin_test:%' "
-            "AND ip NOT LIKE 'auto:%'))",
+            "AND ip NOT LIKE 'admin_wet_food:%' AND ip NOT LIKE 'auto:%'))",
             (day_start.isoformat(),),
         ).fetchone()
     return row[0] if row else 0

@@ -262,6 +262,51 @@ async def admin_feed_test(request: Request):
     return {"ok": True, "message": "模擬出糧完成，冇影響真實統計！🧪🐱", **new_status}
 
 
+@app.post("/admin/wet-food")
+async def admin_wet_food(request: Request):
+    ip = client_ip(request)
+
+    if not check_ip(ip):
+        return JSONResponse(
+            status_code=429,
+            content={"ok": False, "reason": "too_many_requests",
+                     "message": "撳得太密啦，唞一唞先"},
+        )
+
+    timestamp = request.headers.get("x-admin-timestamp", "")
+    signature = request.headers.get("x-admin-signature", "")
+    if not verify_admin_signature("POST", "/admin/wet-food", timestamp, signature):
+        return JSONResponse(
+            status_code=403,
+            content={"ok": False, "reason": "unauthorized",
+                     "message": "密碼唔啱或者已過期"},
+        )
+
+    async with _feed_lock:
+        # Wet food is a real owner-provided meal, so it shares the public
+        # cooldown and covers an active auto-feed window. It deliberately does
+        # not call Home Assistant: no kibble is dispensed and the recorder's
+        # PetKit counter never changes.
+        async with autofeed.scheduler_lock():
+            fed_at = now()
+            db.record_feed(
+                fed_at,
+                f"admin_wet_food:{ip}",
+                None,
+                source="admin_wet_food",
+            )
+            db.add_feed_event(fed_at, source="admin_wet_food")
+            autofeed.mark_windows_covered(fed_at)
+
+    new_status = build_status(db.get_last_fed_at())
+    return {
+        "ok": True,
+        "message": "記低咗今餐罐罐！🥫🐱",
+        "fed_at": fed_at.isoformat(),
+        **new_status,
+    }
+
+
 @app.post("/admin/announcement")
 async def admin_set_announcement(request: Request):
     ip = client_ip(request)
