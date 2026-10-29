@@ -1,15 +1,16 @@
-# CatCam Frontend (SvelteKit, static)
+# CatCam 前端（SvelteKit 靜態網站）
 
-純前端 SPA(繁中/EN 雙語切換):直播畫面 + 狀態 + 一個「餵貓」大掣,加一個
-藏起嚟嘅管理通道(連按 logo 5 次)俾自己繞過冷卻時間。build 出嚟係靜態檔,
-唔需要 Node runtime,靠 Caddy 一齊 serve 靜態檔、反向代理後端 API,同代理
+純前端 SPA（繁中／英文雙語切換）：直播畫面、狀態、一個「餵貓」大掣，以及一個
+隱藏管理通道（連按 logo 5 次），讓主人繞過冷卻時間。建置結果是靜態檔案，
+毋須 Node runtime；Caddy 會同時提供靜態檔案、反向代理後端 API，以及代理
 go2rtc 嘅直播串流。
 
 ```
 觀眾 → cat.kelvinp.work → Caddy(:80, CT 114)
         ├─ /                                                      → 靜態 SvelteKit build
-        ├─ /status /feed /admin/feed /admin/feed-test /admin/announcement
-        │  /admin/auto-feed /admin/history /recordings /activity    → reverse_proxy 127.0.0.1:8080（FastAPI 後端）
+        ├─ /status /feed /admin/feed /admin/feed-test /admin/wet-food
+        │  /admin/announcement /admin/auto-feed /admin/fasting
+        │  /admin/fasting/clear /admin/history /recordings /activity → reverse_proxy 127.0.0.1:8080（FastAPI 後端）
         ├─ /clips/*                                                → 靜態檔（FastAPI 寫落去嘅 60 秒餵食片，唔經後端）
         └─ /camera/*                                                → reverse_proxy 127.0.0.1:1984（go2rtc，rewrite 做 /api/*）
 ```
@@ -73,7 +74,7 @@ WebSocket 連線狀態)係兩件完全唔同嘅嘢,唔好搞混。狀態截圖�
 報 `streaming`,所以淨靠 `ha_offline` 捉唔到——後端改為睇 24/7 buffer 有冇
 新鮮片段嚟判斷真係有冇畫面,冇畫面時 `can_feed` 變 `false`、`reason` 做
 `stream_offline`,餵貓掣 disable 兼顯示「📷 直播中斷,暫時餵唔到」(睇唔到隻貓
-就唔好餵)。詳見 `catcam-backend/README.md` 嘅 Stream watchdog 一節。
+就唔好餵）。詳見 `catcam-backend/README.md` 嘅「串流看門狗」一節。
 
 公告彈窗(`status.announcement`)一入站有內容就自動彈出,用返同秘密通道
 登入 modal 一樣嘅 `.modal`/`.modal-backdrop` 樣式。撳右上角 ✕ 關閉會將
@@ -134,7 +135,7 @@ toast）都跟住切換,唔係中英對照同時顯示。
 （存喺 `localStorage`）。呢個係睇瀏覽器語言偏好,唔係 Geo-IP 地理位置——一個
 香港人部機設咗英文,佢會見英文（反映佢想睇乜,而唔係人喺邊）。
 
-## Build(可以喺 macOS 或 CT 內做)
+## 建置（可以喺 macOS 或 CT 內做）
 
 ```bash
 cd catcam-frontend
@@ -145,7 +146,7 @@ npm run build              # 產出 build/ 資料夾
 
 改完 `.env` 要**重新 `npm run build`**(Vite 喺 build 時 inline 呢啲值)。
 
-## 部署到 CT 114(catcam)
+## 部署到 CT 114（catcam）
 
 ```bash
 # macOS build 完，打包送上 Proxmox host，再經 pct push/exec 入 CT
@@ -164,18 +165,19 @@ ssh root@upsn150-pve "
 "
 ```
 
-`Caddyfile`（repo 根同 `deploy/` 都有一份,內容要保持一致,**改完兩份都要
-部署去 CT 114 先生效** —— 之前試過淨係改本地 repo 冇 push,新 endpoint
+`Caddyfile`（repo 根同 `deploy/` 都有一份，內容要保持一致，**改完兩份都要
+部署去 CT 114 先生效**）——之前試過淨係改本地 repo 冇部署，新 endpoint
 response 靜默跌去 SPA fallback，攞住 HTML 當 JSON parse，前端顯示完全
 唔相關嘅錯誤）已經設定好 `/` serve 靜態 build、`/status /feed /health
-/admin/feed /admin/feed-test /admin/announcement /admin/auto-feed
-/admin/history /recordings /activity` 代理去後端、`/clips/*` 直接 serve 後端寫落 CT 本機嘅餵食片、
+/admin/feed /admin/feed-test /admin/wet-food /admin/announcement /admin/auto-feed
+/admin/fasting /admin/fasting/clear /admin/history /recordings /activity` 代理去後端、
+`/clips/*` 直接 serve 後端寫落 CT 本機嘅餵食片、
 `/camera/*` 代理去 go2rtc。CT 入面要裝 Caddy(見官方 apt repo 說明)同
 go2rtc,並喺 Cloudflare Tunnel 加一條 route:`cat.kelvinp.work` →
 `http://<CT IP>:80`。新增任何一個 `/admin/*` endpoint,呢度嘅路由清單都要
 同步加返,唔係得 `app/main.py` 加個 route 就夠。
 
-## 本機預覽(開發用)
+## 本機預覽（開發用）
 
 ```bash
 npm run dev        # http://localhost:5173，會打你 VITE_API_BASE 設定嘅後端
@@ -187,6 +189,6 @@ npm run dev        # http://localhost:5173，會打你 VITE_API_BASE 設定嘅�
 
 ## 設計風格
 
-色票同 CSS 變數（`src/app.css`）係跟個人 design-system 參考文件
-（Lattice，light variant）對出嚟嘅 token,唔係隨便揀顏色。改色前先睇
-嗰份參考文件有冇現成 token 可以用,唔好自己加新色碼。
+色票同 CSS 變數（`src/app.css`）係跟個人設計系統參考文件
+（Lattice light variant）對出嚟嘅 token，唔係隨便揀顏色。改色前先睇
+嗰份參考文件有冇現成 token 可以用，唔好自己加新色碼。

@@ -1,47 +1,45 @@
 # 🐱 CatCam
 
-A public **"feed my cat"** web app. Viewers open a link, watch a live stream of
-the cat, and press a button to dispense a portion of food — subject to sensible
-rules (shared cooldown, open hours, anti-spam). The button ultimately triggers a
-real smart feeder through Home Assistant. A hidden admin channel (tap the logo
-5×) lets the owner bypass those rules with an HMAC-signed request.
+一個公開的**網上餵貓**應用程式。訪客開啟連結後，可以觀看貓咪直播並按掣出一份
+乾糧；系統會執行共用 cooldown、開放時間及防洗版等規則。餵食按鈕最終經由
+Home Assistant 控制真實智能餵食機。主人可連按標誌 5 次開啟隱藏 Admin 通道，
+再以 HMAC 簽署請求繞過公開規則。
 
 ```
-Viewer's browser
+訪客瀏覽器
       │
       ├────────────────────────────────────────────┐
       ▼                                             ▼
-SvelteKit frontend  ──►  FastAPI backend  ──►  Home Assistant REST API  ──►  🍚 feeder
-   (static SPA)          (rules + state)        (text.*_manual_feed)
+SvelteKit 前端  ──►  FastAPI 後端  ──►  Home Assistant REST API  ──►  🍚 餵食機
+  （靜態 SPA）       （規則及狀態）        (text.*_manual_feed)
       │
       ▼
-go2rtc (WebSocket + MSE)  ──►  Home Assistant WHEP  ──►  📷 PetKit camera
+go2rtc (WebSocket + MSE)  ──►  Home Assistant WHEP  ──►  📷 PetKit 相機
 ```
 
-## Why I built it
+## 製作原因
 
-I wanted a small but complete full-stack project on real hardware: a camera and
-a smart pet feeder at home, exposed safely to the public internet. It turned
-into a nice exercise in API design, concurrency, rate limiting, and keeping
-secrets on the server side — never in the browser.
+我想以家中的相機及智能餵食機，製作一個小型但完整、真正連接硬件的全端專案，
+並安全地開放到互聯網。這個專案亦讓我實際練習 API 設計、並行處理、速率限制，
+以及只在伺服器端保存秘密資料、不把金鑰放進瀏覽器等做法。
 
-## Repository layout
+## 專案結構
 
-| Folder             | What it is                                                        |
+| 資料夾 | 用途 |
 | ------------------ | ----------------------------------------------------------------- |
-| [`catcam-backend`](./catcam-backend)   | Python + FastAPI service. Enforces feeding rules and calls Home Assistant. Keeps the HA token server-side. |
-| [`catcam-frontend`](./catcam-frontend) | SvelteKit static SPA (繁中/EN toggle). Live stream (go2rtc, WebSocket+MSE), status, feed button, and a hidden admin channel. |
+| [`catcam-backend`](./catcam-backend) | Python + FastAPI 服務。執行餵食規則、呼叫 Home Assistant，並把 HA token 留在伺服器端。 |
+| [`catcam-frontend`](./catcam-frontend) | SvelteKit 靜態 SPA（繁中／英文切換）。提供 go2rtc WebSocket + MSE 直播、狀態、餵食按鈕及隱藏 Admin 通道。 |
 
-Each folder has its own README with setup and deployment details.
+兩個資料夾各有自己的 README，詳細說明安裝及部署方法。
 
-## Feeding rules
+## 餵食規則
 
-- **Link-only** — no login required.
-- **Shared cooldown** — 120 minutes between feeds, across all visitors.
-- **Open hours** — 07:00–23:59 (Asia/Hong_Kong).
-- **Fixed portion** — one standard amount per feed.
-- **Per-IP anti-spam** — stops a single client hammering the endpoint (separate from the feeding quota).
-- State (`last_fed_at`) is persisted in **SQLite**, so restarts keep the limits.
+- **憑連結使用**：毋須登入。
+- **共用 cooldown**：所有訪客共用 120 分鐘餵食間隔。
+- **開放時間**：香港時間 07:00–23:59。
+- **固定份量**：每次出一份標準份量。
+- **每個 IP 防洗版**：阻止單一用戶短時間內重複呼叫 endpoint，與餵食配額分開計算。
+- 狀態（`last_fed_at`）會保存至 **SQLite**，重啟服務後仍會保留限制。
 
 ### API 對照與 `/feed` 後端防線
 
@@ -89,45 +87,39 @@ Admin 在公開餵食時間外記錄餵罐罐後，系統會同時考慮「120 �
 | 凌晨 05:30 | 07:30 | 07:30 | `🍚 餵貓 2 小時 0 分鐘` |
 | 早上 06:30 | 08:30 | 08:30 | `🍚 餵貓 2 小時 0 分鐘` |
 
-## Screenshots
+## 畫面截圖
 
-The feed button reflects exactly one state at a time — `GET /status` returns
-`can_feed` + a `reason`, and the frontend renders accordingly:
+餵食按鈕每次只會顯示一種狀態。`GET /status` 會回傳 `can_feed` 及 `reason`，
+前端再按結果顯示對應畫面：
 
-| State | `reason` | What the visitor sees |
+| 狀態 | `reason` | 訪客看到的畫面 |
 | ----- | -------- | ---------------------- |
-| Ready to feed | `ok` | <img src="docs/screenshots/feed-ready.png" width="220" alt="Feed button ready"> |
-| Cooldown running | `cooldown` | <img src="docs/screenshots/feed-cooldown.png" width="220" alt="Feed button showing cooldown countdown"> |
-| Outside open hours | `outside_hours` | <img src="docs/screenshots/feed-outside-hours.png" width="220" alt="Feed button showing time until open hours"> |
-| Feeder (Home Assistant) unreachable | `ha_offline` | <img src="docs/screenshots/feed-ha-offline.png" width="220" alt="Feed button disabled, feeder offline"> |
-| Live stream stalled | `stream_offline` | <img src="docs/screenshots/feed-stream-offline.png" width="220" alt="Feed button disabled, live stream stalled"> |
-| Admin paused feeding ("fasting mode") | `fasting` | Feed button disabled; a themed banner overlays the live view. Highest-priority reason — overrides `ha_offline`/`stream_offline` even if both are also true, since it's a deliberate choice rather than an outage. |
+| 可以餵食 | `ok` | <img src="docs/screenshots/feed-ready.png" width="220" alt="餵食按鈕可以使用"> |
+| Cooldown 倒數中 | `cooldown` | <img src="docs/screenshots/feed-cooldown.png" width="220" alt="餵食按鈕顯示 cooldown 倒數"> |
+| 不在開放時間 | `outside_hours` | <img src="docs/screenshots/feed-outside-hours.png" width="220" alt="餵食按鈕顯示距離開放時間的倒數"> |
+| 餵食機／Home Assistant 無法連線 | `ha_offline` | <img src="docs/screenshots/feed-ha-offline.png" width="220" alt="餵食機離線，按鈕停用"> |
+| 直播中斷 | `stream_offline` | <img src="docs/screenshots/feed-stream-offline.png" width="220" alt="直播中斷，按鈕停用"> |
+| Admin 開啟禁食模式 | `fasting` | 餵食按鈕停用，直播畫面上顯示禁食提示。這是最高優先狀態；即使同時出現 `ha_offline`／`stream_offline`，仍會顯示禁食，因為它是主人主動設定，而非系統故障。 |
 
-`ha_offline` is detected server-side by a background poll against Home
-Assistant (independent of any feed attempt) — the button disables itself
-within ~15s of HA going down, instead of waiting for a visitor to hit it and
-get a 502.
+後端會在背景定期查詢 Home Assistant，獨立判斷 `ha_offline`，不需要等訪客先嘗試
+餵食。HA 斷線後約 15 秒，按鈕便會自動停用，而不是等用戶按下才收到 502。
 
-All screenshots above except `stream_offline` show a live camera frame —
-captured with
+除 `stream_offline` 外，上述截圖都會顯示直播畫面。截圖時使用
 [`docs/screenshots/camera-live-reference.png`](docs/screenshots/camera-live-reference.png)
-kept as the canonical "online" reference frame, so any future re-capture of
-these screenshots reuses the same scene instead of whatever happens to be in
-frame at capture time. `stream_offline` is the one state where there's no
-frame to show by definition — the screenshot captures the feeder mid-outage.
+作為固定的「在線」參考畫面，日後重新擷取截圖時會重用同一場景，不會把當刻相機
+拍到的內容放進文件。`stream_offline` 本身沒有畫面，因此該截圖會顯示中斷中的
+餵食機。
 
-Beside the live view (below it on mobile) is a read-only **feeding activity**
-feed. Every real dispense — from the site, the PetKit app, the physical
-button, or a scheduled auto-feed — posts two messages about a minute apart:
-"🍚 餵咗 Roll Roll" the instant it's detected, then "📹 錄影好咗" with a
-watch-back link once the 60-second clip finishes rendering.
+直播旁邊（手機版在直播下方）是唯讀的**餵食動態**。每次真實出糧，不論來自
+網站、PetKit App、機身按鈕或自動餵食，都會相隔約 1 分鐘顯示兩則訊息：系統
+偵測到出糧時先顯示「🍚 餵咗 Roll Roll」；60 秒影片完成後，再顯示附有重播
+連結的「📹 錄影好咗」。
 
-An admin-recorded wet-food meal appears immediately as
-"🥫🐟 啱啱餵咗 Roll Roll 食罐罐", restarts the public cooldown, and covers any
-active auto-feed window, but deliberately has no PetKit dispense and no
-recording/pending-recording message.
+Admin 記錄餵罐罐後，動態會立即顯示「🥫🐟 啱啱餵咗 Roll Roll 食罐罐」，
+重新開始公開 cooldown，並完成當刻命中的自動餵食時段。由於沒有經 PetKit
+出糧，因此不會產生錄影或「錄影整緊」訊息。
 
-### Feeding records by source
+### 各種餵食來源的資料紀錄
 
 | 餵食方式 | `feed_log` | `feed_event` |
 | --- | --- | --- |
@@ -140,151 +132,132 @@ recording/pending-recording message.
 | 餵食機機身按鈕 | ❌ | ✅ |
 | PetKit 自己的排程 | ❌ | ✅ |
 
-<img src="docs/screenshots/feeding-activity.png" width="300" alt="Feeding activity feed: a 餵咗 message then a 錄影好咗 watch-back link per dispense">
+<img src="docs/screenshots/feeding-activity.png" width="300" alt="餵食動態：每次出糧先顯示餵咗，再顯示附重播連結的錄影好咗">
 
-The hidden admin channel (tap the logo 5×, enter the password) unlocks a
-force-feed button that bypasses the current rules but starts a fresh public
-cooldown after dispensing, a simulate-visitor test feed for exercising the
-pipeline without affecting the public cooldown or stats, a wet-food button for
-logging an owner-served canned meal without dispensing kibble, an announcement banner,
-auto-feed safety-net windows
-(auto-feed a portion when a window closes if no one fed during it), and today's
-PetKit-side dispense history:
+連按標誌 5 次並輸入密碼，即可開啟隱藏 Admin 通道。管理功能包括：繞過當刻
+限制、但成功後重新開始公開 cooldown 的強制餵食；不影響公開 cooldown 或統計的
+模擬訪客測試；只記錄主人親手餵罐頭、不出乾糧的餵罐罐按鈕；公告欄；自動餵食
+安全網時段（時段內無人餵食便在結束時補一份）；以及今日 PetKit 出糧紀錄：
 
-<img src="docs/screenshots/admin-panel.png" width="260" alt="Admin panel: force feed, simulated test feed, announcement banner, auto-feed windows, and today's PetKit feed history">
+<img src="docs/screenshots/admin-panel.png" width="260" alt="Admin 面板：強制餵食、模擬測試、公告、自動餵食時段及今日 PetKit 出糧紀錄">
 
-A force-feed inside an auto-feed safety-net window marks that whole window as
-handled immediately, so its scheduled close cannot dispense a second portion.
-This remains true for windows longer than the 120-minute cooldown.
+在自動餵食安全網時段內強制餵食，會立即把整個時段標記為已處理，避免時段結束時
+再次出糧。即使該時段長過 120 分鐘 cooldown，這項保護仍然有效。
 
-**Fasting mode** (same admin panel) is a toggle, not just a UI skin — turning
-it on also **pauses the auto-feed safety-net windows**. Those windows
-dispense on their own (`autofeed.py`'s loop calls Home Assistant directly,
-with no public request involved), so without this check they'd quietly
-override the whole point of pausing feeding. The check is a plain early
-`return` at the top of `_check_once()`, and deliberately leaves that cycle's
-windows unmarked (not "handled") — clearing fasting while still inside the
-auto-feed grace period lets the very next tick catch up and feed normally,
-instead of silently skipping it for the day.
+同一 Admin 面板內的**禁食模式**是實際功能，不只是改變介面。開啟後亦會**暫停
+自動餵食安全網時段**。這些時段由 `autofeed.py` 的 loop 直接呼叫 Home Assistant，
+不需要公開請求；如果沒有這項檢查，系統仍可能在背景出糧。`_check_once()` 一開始
+便會提早 `return`，而且不會把該輪時段標記為已處理。若在寬限時間內解除禁食，
+下一輪檢查仍可正常補餵，不會無聲地跳過整天。
 
-Fasting mode does **not** touch the shared cooldown — `last_fed_at` and the
-`fasting` flag are two independent pieces of state. Starting a fast mid-
-cooldown doesn't reset or extend the timer, and clearing it doesn't grant an
-immediate feed if cooldown hasn't actually elapsed; `/status` just reports
-whatever `reason` the cooldown math already produces once `fasting` is back
-to `false` (`ok` if cooldown finished during the fast, `cooldown` with
-however much time is actually left if it hadn't).
+禁食模式**不會**改動共用 cooldown；`last_fed_at` 與 `fasting` 是兩組獨立狀態。
+在 cooldown 中途開啟禁食不會重設或延長倒數；解除禁食時，如果原本 cooldown 尚未
+完結，亦不會立即開放餵食。當 `fasting` 回復為 `false` 後，`/status` 只會顯示
+原有 cooldown 計算結果：禁食期間已倒數完便是 `ok`，否則仍是 `cooldown` 並顯示
+實際剩餘時間。
 
-## Workflow diagram references
+## 流程圖圖示參考
 
-These two reference images are saved for future study when documenting the
-CatCam architecture, events, database calls, and end-to-end program flow:
+以下兩張參考圖片保留作日後研究，用於繪製 CatCam 架構、事件、資料庫呼叫及完整
+程式流程：
 
-- [`docs/references/workflow-common-symbols.png`](docs/references/workflow-common-symbols.png) — common workflow symbols: start/end, process, decision, and arrows.
-- [`docs/references/workflow-swimlane-example.png`](docs/references/workflow-swimlane-example.png) — a swimlane example showing how a process crosses different actors or systems.
+- [`docs/references/workflow-common-symbols.png`](docs/references/workflow-common-symbols.png)：常用 workflow 圖示，包括開始／結束、處理步驟、判斷及箭嘴。
+- [`docs/references/workflow-swimlane-example.png`](docs/references/workflow-swimlane-example.png)：Swimlane 範例，展示一個流程如何跨越不同角色或系統。
 
-They are reference materials only, not diagrams of the current CatCam
-implementation.
+它們只屬參考資料，並非目前 CatCam 實作的流程圖。
 
-## Camera streaming (and why it goes through the cloud)
+## 相機串流及必須經過雲端的原因
 
-The camera here is a **PetKit YumShare Solo** — a smart feeder with a built-in
-camera, not a normal IP camera. It has **no native RTSP or ONVIF output**, so
-there is no `rtsp://…` URL to pull from directly the way you would with a
-generic IP cam. PetKit delivers video over its own proprietary cloud protocol,
-and the only supported path into Home Assistant is a cloud WHEP session.
+這裡使用的 **PetKit YumShare Solo** 是內置相機的智能餵食機，不是一般 IP 相機。
+它**沒有原生 RTSP 或 ONVIF 輸出**，因此不存在可像普通 IP Cam 一樣直接拉取的
+`rtsp://…` URL。PetKit 透過自家雲端協定傳送影片；目前進入 Home Assistant 的
+唯一支援方式，是使用雲端 WHEP session。
 
-That cloud hop is the weak link: on the **free tier (no "Care+" subscription)**
-PetKit periodically tears down the camera session, which is the root cause of
-the occasional "no live picture" outages (recovery is documented in the
-`my-homelab` skill — reload the PetKit HA integration, then restart go2rtc).
+這段雲端路徑是最脆弱的一環。在**免費方案（沒有訂閱 Care+）**下，PetKit 會定期
+中斷相機 session，這正是直播偶爾沒有畫面的根本原因。修復方法已記錄在
+`my-homelab` skill：先重新載入 PetKit HA integration，再重啟 go2rtc。
 
 ```
-How CatCam serves the feed today (half-cloud):
+CatCam 目前的半雲端串流路徑：
 
-  YumShare Solo ──encrypted upload──► PetKit cloud ──WHEP──► HA ──► go2rtc ──► this site
+  YumShare Solo ──加密上傳──► PetKit 雲端 ──WHEP──► HA ──► go2rtc ──► 本網站
                                        ▲
-                            free tier (no Care+): this hop drops periodically —
-                            the root cause of the "no live picture" outages
+                         免費方案（沒有 Care+）：這一段會定期中斷，
+                                  是直播沒有畫面的根本原因
 ```
 
-A fully-local, cloud-free path is *possible* but not built in — it needs a
-community reverse-engineering project (e.g. `petkit-local` / LocalKit) that
-re-provisions the device to a local stand-in server. That migration is tracked
-as a separate project plan, not part of this repo.
+完全本地、毋須雲端的方案在技術上*可行*，但本專案尚未實作。它需要使用社群逆向
+工程專案（例如 `petkit-local`／LocalKit），重新配置裝置連接本地替代伺服器。
+該遷移另有獨立專案計劃，不屬於這個 repository 的範圍。
 
-Because those drops happen, the backend runs a **stream watchdog**. It judges
-liveness off the 24/7 pre-roll buffer's segment freshness — not HA
-reachability, since HA keeps reporting `streaming` right through a cloud stall.
-When frames stop flowing it (a) sets `/status` `stream_online: false` so the
-public feed button disables (`reason: stream_offline`), and (b) after a
-sustained outage auto-runs the same recovery a human would — reload the PetKit
-integration, restart go2rtc — rate-limited so a genuine cloud outage isn't
-hammered.
+由於雲端 session 會中斷，後端設有 **stream watchdog**。它會以 24/7 pre-roll
+buffer 片段的新鮮程度判斷直播是否正常，而不是只看 HA 能否連線；因為即使雲端
+串流已停，HA 仍可能持續回報 `streaming`。停止收到畫面後，系統會：(a) 把
+`/status` 的 `stream_online` 設為 `false`，以 `reason: stream_offline` 停用公開
+餵食按鈕；(b) 若中斷持續一段時間，自動執行人工修復流程——重新載入 PetKit
+integration 並重啟 go2rtc。修復亦設有速率限制，避免真正雲端故障時不斷重試。
 
-## Tech stack
+## 技術組合
 
-- **Backend:** Python, FastAPI, Uvicorn, httpx, SQLite
-- **Frontend:** SvelteKit (static adapter), Vite
-- **Infra:** Caddy (static serving + reverse proxy), Cloudflare Tunnel, Home
-  Assistant, go2rtc (WHEP → WebSocket+MSE relay for the live camera)
+- **後端：** Python、FastAPI、Uvicorn、httpx、SQLite
+- **前端：** SvelteKit（static adapter）、Vite
+- **基礎設施：** Caddy（靜態檔案服務及 reverse proxy）、Cloudflare Tunnel、
+  Home Assistant、go2rtc（把相機 WHEP 轉發成 WebSocket + MSE）
 
-## Where it runs (platform & resources)
+## 運行平台及資源
 
-Both parts run **together in one unprivileged LXC container** on my home
-Proxmox box — no Docker, no Kubernetes, just systemd services. The Intel iGPU's
-render node is passed into the container so go2rtc can do **hardware (VAAPI)
-H264 encoding** of the re-streamed feed; that's what keeps CPU low.
+前後端一同運行在家中 Proxmox 的**單一 unprivileged LXC container**；沒有使用
+Docker 或 Kubernetes，只使用 systemd services。Intel iGPU render node 會傳入
+container，讓 go2rtc 以 **VAAPI 硬件進行 H264 編碼**，因此 CPU 使用量可以維持
+在低水平。
 
-| | What I actually run | Measured idle usage |
+| 項目 | 實際配置 | 實測閒置用量 |
 | --- | --- | --- |
-| Host | Proxmox VE 9.2, kernel 6.x | — |
+| Host | Proxmox VE 9.2、kernel 6.x | — |
 | Container | Debian 13 (trixie) LXC | — |
-| vCPU | 1 core | ~16% of it (peak is the VAAPI encode) |
-| RAM | 4 GB (generous overkill) | ~250 MB |
+| vCPU | 1 core | 約 16%（高峰主要來自 VAAPI 編碼） |
+| RAM | 4 GB（遠高於需要） | 約 250 MB |
 | Swap | 512 MB | 0 |
-| Disk | 8 GB volume | ~2.8 GB (OS + venv + 7-day clips) |
-| GPU | `/dev/dri/renderD128` passed in (VAAPI) | — |
+| 磁碟 | 8 GB volume | 約 2.8 GB（OS、venv 及 7 日影片） |
+| GPU | 傳入 `/dev/dri/renderD128`（VAAPI） | — |
 
-### Recommended minimum
+### 建議最低配置
 
-The 4 GB RAM is wildly more than needed — this comfortably fits a small box.
-A realistic floor:
+4 GB RAM 遠高於實際需要，小型主機已足以運行。較實際的最低配置如下：
 
-| Resource | Minimum | Notes |
+| 資源 | 最低配置 | 說明 |
 | --- | --- | --- |
-| **CPU** | **1 vCPU *with* hardware video encode** (VAAPI/an iGPU render node) | The one real cost is encoding the live re-stream. With VAAPI it's ~15% of a core. **Without** hardware encode, software H264 will peg a single core — then budget **2+ vCPU**. |
-| **RAM** | **512 MB** (1 GB comfortable) | Measured footprint is ~250 MB; the rest is headroom + page cache. |
-| **Disk** | **~4 GB** | OS + Python venv + the SvelteKit build + a rolling 7-day window of 60s clips (grows with how often the cat is fed). |
-| **OS** | Any systemd Linux | No Docker required; it's plain `systemd` units. |
-| **Network** | Outbound to Home Assistant + the feeder's cloud; a reverse proxy or tunnel (Caddy + Cloudflare Tunnel here) to expose it publicly | WebRTC media never needs to be exposed — only HTTPS/WSS. |
+| **CPU** | **1 vCPU，並具備硬件影片編碼**（VAAPI／iGPU render node） | 主要負載是重新編碼直播。使用 VAAPI 時約佔 15% 單核；**沒有**硬件編碼時，軟件 H264 會用盡單核，建議改用 **2+ vCPU**。 |
+| **RAM** | **512 MB**（1 GB 較充裕） | 實測約使用 250 MB，其餘作為緩衝及 page cache。 |
+| **磁碟** | **約 4 GB** | 包含 OS、Python venv、SvelteKit build，以及滾動保存 7 日的 60 秒影片；實際用量會隨餵食次數增加。 |
+| **OS** | 任何支援 systemd 的 Linux | 毋須 Docker，只使用一般 `systemd` units。 |
+| **網絡** | 可連接 Home Assistant 及餵食機雲端；另需 reverse proxy 或 tunnel（本專案使用 Caddy + Cloudflare Tunnel）公開網站 | WebRTC media 不需要直接對外，只需開放 HTTPS／WSS。 |
 
-In short: **1 core + 512 MB–1 GB RAM + a few GB disk + an iGPU for VAAPI** is
-plenty. The camera and feeder themselves (a PetKit YumShare Solo) and a Home
-Assistant instance are the other prerequisites.
+簡單而言，**1 core、512 MB–1 GB RAM、數 GB 磁碟及支援 VAAPI 的 iGPU** 已經
+足夠。其他必要設備包括 PetKit YumShare Solo 相機餵食機，以及一個 Home
+Assistant instance。
 
-## Quick start
+## 快速開始
 
-Run the two parts separately during development:
+開發時可分別啟動前後端：
 
 ```bash
-# Backend — see catcam-backend/README.md
+# 後端：詳見 catcam-backend/README.md
 cd catcam-backend
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env        # then set HA_TOKEN
+cp .env.example .env        # 然後設定 HA_TOKEN
 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080
 
-# Frontend — see catcam-frontend/README.md
+# 前端：詳見 catcam-frontend/README.md
 cd catcam-frontend
 cp .env.example .env
 npm install
 npm run dev                 # http://localhost:5173
 ```
 
-## Configuration & secrets
+## 設定及秘密資料
 
-Both parts are configured via `.env` files. A `.env.example` template is
-provided in each folder — copy it to `.env` and fill in your own values. The
-real `.env` files are **git-ignored and never committed**; in particular the
-Home Assistant long-lived access token lives only in the backend's `.env`.
+前後端都透過 `.env` 設定。每個資料夾都提供 `.env.example` 範本；把它複製成
+`.env` 後填入自己的數值。真正的 `.env` 已加入 **git-ignore，永遠不會 commit**；
+其中 Home Assistant long-lived access token 只會保存在後端 `.env`。
 
