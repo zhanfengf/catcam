@@ -4,6 +4,13 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.18.0 — 強制餵貓重設公開冷卻並完成自動餵食時段（2026-10-29）
+
+- `2294920` 強制餵貓仍可繞過當刻嘅冷卻及開放時間，但成功出糧後會更新 `last_fed_at`，由該刻重新開始 120 分鐘公開冷卻；仍然用 `admin:<ip>` 排除喺「訪客餵食咗」統計之外。
+- 強制餵發生喺自動餵食時段內時，會即時把所有命中時段寫入 `auto_feed_handled`，即使時段長過 120 分鐘，結束時都唔會再補餵。強制餵同排程檢查共用一把 async lock，封住時段邊界同時出糧嘅 race condition。
+- 模擬訪客出糧改用 `source="admin_test"` 明確保留舊行為：真出糧、照出餵食動態及錄影，但唔更新公開冷卻、唔計訪客統計。
+- 新增 3 個單元測試，覆蓋強制餵重設倒數、模擬出糧保持原倒數，以及長時段內強制餵會標記完成。
+
 ## v0.17.0 — 每次訪客餵食推送 Telegram(時間+IP+國家+片URL)(2026-10-27)
 
 - `34d2992` Telegram alert per genuine web-visitor feed——每次**真網站訪客**餵食,片整好（~1 分鐘）後推一條去 Telegram:`🍚 有訪客餵咗 Roll Roll` + 🕐 時間 + 🌐 `IP · 國家` + 📹 片 URL。
