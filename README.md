@@ -79,13 +79,18 @@ watch-back link once the 60-second clip finishes rendering.
 <img src="docs/screenshots/feeding-activity.png" width="300" alt="Feeding activity feed: a 餵咗 message then a 錄影好咗 watch-back link per dispense">
 
 The hidden admin channel (tap the logo 5×, enter the password) unlocks a
-force-feed button that bypasses all the rules above, a simulate-visitor test
-feed for exercising the dispense pipeline without affecting the public
-cooldown or stats, an announcement banner, auto-feed safety-net windows
+force-feed button that bypasses the current rules but starts a fresh public
+cooldown after dispensing, a simulate-visitor test feed for exercising the
+pipeline without affecting the public cooldown or stats, an announcement banner,
+auto-feed safety-net windows
 (auto-feed a portion when a window closes if no one fed during it), and today's
 PetKit-side dispense history:
 
 <img src="docs/screenshots/admin-panel.png" width="260" alt="Admin panel: force feed, simulated test feed, announcement banner, auto-feed windows, and today's PetKit feed history">
+
+A force-feed inside an auto-feed safety-net window marks that whole window as
+handled immediately, so its scheduled close cannot dispense a second portion.
+This remains true for windows longer than the 120-minute cooldown.
 
 **Fasting mode** (same admin panel) is a toggle, not just a UI skin — turning
 it on also **pauses the auto-feed safety-net windows**. Those windows

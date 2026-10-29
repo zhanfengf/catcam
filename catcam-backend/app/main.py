@@ -182,22 +182,35 @@ async def admin_feed(request: Request):
         )
 
     async with _feed_lock:
-        s = get_settings()
-        try:
-            await ha.dispense(s.feed_amount)
-        except ha.HAError as exc:
-            return JSONResponse(
-                status_code=502,
-                content={"ok": False, "reason": "ha_error",
-                         "message": "餵食機而家連唔到，遲啲再試",
-                         "detail": str(exc)},
-            )
+        # Serialize this dispense with the auto-feed boundary check. Without
+        # the shared lock, a force-feed at exactly the window end could race
+        # the scheduler and both calls could reach Home Assistant.
+        async with autofeed.scheduler_lock():
+            s = get_settings()
+            try:
+                await ha.dispense(s.feed_amount)
+            except ha.HAError as exc:
+                return JSONResponse(
+                    status_code=502,
+                    content={"ok": False, "reason": "ha_error",
+                             "message": "餵食機而家連唔到，遲啲再試",
+                             "detail": str(exc)},
+                )
 
-        fed_at = now()
-        db.record_feed(fed_at, f"admin:{ip}", s.feed_amount, source="admin")
+            fed_at = now()
+            db.record_feed(fed_at, f"admin:{ip}", s.feed_amount, source="admin")
+            # Force-feed bypasses the cooldown that was already running, but
+            # the successful dispense becomes the new public cooldown anchor.
+            # Mark any containing auto-feed window covered before releasing
+            # the scheduler lock.
+            autofeed.mark_windows_covered(fed_at)
 
     new_status = build_status(db.get_last_fed_at())
-    return {"ok": True, "message": "強制餵咗喇！🔓🐱", **new_status}
+    return {
+        "ok": True,
+        "message": f"強制餵咗喇！公開餵食 {s.cooldown_minutes} 分鐘後再開 🔓🐱",
+        **new_status,
+    }
 
 
 @app.post("/admin/feed-test")
@@ -233,13 +246,13 @@ async def admin_feed_test(request: Request):
             )
 
         fed_at = now()
-        # source="admin" keeps this out of the public cooldown (last_fed_at)
-        # just like /admin/feed — this button is for testing the dispense
-        # pipeline itself, not for actually feeding on the visitor's behalf.
+        # source="admin_test" keeps this out of the public cooldown
+        # (last_fed_at). This button is for testing the dispense pipeline
+        # itself, not for actually feeding on the visitor's behalf.
         # "admin_test:" (not "admin:") so it's excluded from the public
         # "訪客餵食咗" count the same way, while staying distinguishable in
         # feed_log from a real forced feed via /admin/feed
-        db.record_feed(fed_at, f"admin_test:{ip}", s.feed_amount, source="admin")
+        db.record_feed(fed_at, f"admin_test:{ip}", s.feed_amount, source="admin_test")
 
     new_status = build_status(db.get_last_fed_at())
     return {"ok": True, "message": "模擬出糧完成，冇影響真實統計！🧪🐱", **new_status}

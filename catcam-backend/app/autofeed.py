@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import time, timedelta
+from datetime import datetime, time, timedelta
 
 from . import db, ha
 from .config import get_settings
@@ -14,6 +14,7 @@ _CHECK_SECONDS = 60
 _GRACE_MINUTES = 60
 
 _task: asyncio.Task | None = None
+_scheduler_lock = asyncio.Lock()
 
 
 def parse_window(w: str) -> tuple[time, time] | None:
@@ -30,7 +31,47 @@ def parse_window(w: str) -> tuple[time, time] | None:
     return start, end
 
 
+def scheduler_lock() -> asyncio.Lock:
+    """Shared lock for a force-feed and the auto-feed boundary check."""
+    return _scheduler_lock
+
+
+def mark_windows_covered(fed_at: datetime) -> list[str]:
+    """Mark every auto-feed window containing `fed_at` as handled today.
+
+    Called immediately after an owner force-feed succeeds, instead of waiting
+    for the 10-second PetKit counter poll. This closes the race where a feed at
+    the very end of a window could otherwise be followed by the scheduler's
+    own dispense before the recorder has observed it. It also makes a feed near
+    the start of a window cover that whole window even when the window is
+    longer than the public cooldown.
+    """
+    current_t = fed_at.timetz().replace(tzinfo=None)
+    today = fed_at.date().isoformat()
+    handled = db.get_auto_feed_handled()
+    marked: list[str] = []
+
+    for window in db.get_auto_feed_windows():
+        parsed = parse_window(window)
+        if not parsed:
+            continue
+        start_t, end_t = parsed
+        if start_t <= current_t <= end_t:
+            handled[window] = today
+            marked.append(window)
+
+    if marked:
+        db.set_auto_feed_handled(handled)
+        logger.info("autofeed: force-feed covered window(s): %s", ", ".join(marked))
+    return marked
+
+
 async def _check_once() -> None:
+    async with _scheduler_lock:
+        await _check_once_locked()
+
+
+async def _check_once_locked() -> None:
     windows = db.get_auto_feed_windows()
     if not windows:
         return

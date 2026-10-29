@@ -15,10 +15,11 @@ service — the Home Assistant token stays here, never in the browser.
 - Open window: **07:00–23:59 (Asia/Hong_Kong)**.
 - Fixed portion: **10**.
 - Per-IP anti-spam (stops hammering; not the feeding quota).
-- `last_fed_at` persisted in **SQLite**, so restarts keep the limit. Only
-  **public** (`/feed`) calls advance this timestamp — the owner's
-  `/admin/feed` bypass never pushes out or resets the public cooldown, so
-  using the secret channel doesn't block or confuse visitors.
+- `last_fed_at` persisted in **SQLite**, so restarts keep the limit. Public
+  `/feed`, owner force-feed `/admin/feed`, and scheduled auto-feed calls all
+  advance this timestamp. `/admin/feed` may bypass a cooldown already in
+  progress, but its successful dispense starts a fresh 120-minute cooldown.
+  Only `/admin/feed-test` leaves the countdown untouched.
 - `fed_today` (shown as "訪客食咗"/"Fed by visitors") counts **public feeds
   only** — admin-channel feeds are excluded, by design.
 
@@ -28,7 +29,7 @@ service — the Home Assistant token stays here, never in the browser.
 | ------ | ---------------- | ------------------------------------------------------- |
 | GET    | `/status`             | Can we feed now? next feed time, window, visitor fed-today count, `ha_online`, `stream_online`, `announcement`, `auto_feed_windows`. |
 | POST   | `/feed`               | Try to feed. Enforces all rules, then calls HA.          |
-| POST   | `/admin/feed`         | HMAC-signed bypass (cooldown + open hours) for the owner only. |
+| POST   | `/admin/feed`         | HMAC-signed bypass (cooldown + open hours); a successful force-feed starts a fresh public cooldown. |
 | POST   | `/admin/feed-test`    | HMAC-signed. Dispenses for real (tests the pipeline end to end) but excluded from the public cooldown and the "訪客餵食咗" count. |
 | POST   | `/admin/announcement` | HMAC-signed. Sets (or clears, with `""`) the announcement banner text. |
 | POST   | `/admin/auto-feed`    | HMAC-signed. Sets the list of `HH:MM-HH:MM` auto-feed safety-net windows. |
@@ -46,13 +47,13 @@ unlocking (tap the logo 5×, enter `ADMIN_TOKEN`). Every request must be
 HMAC-SHA256 signed with `ADMIN_TOKEN` over `{METHOD}:{PATH}:{timestamp}` and
 include a timestamp within `ADMIN_SIG_WINDOW_SECONDS` — see
 `verify_admin_signature()` in `app/main.py`. No plaintext password crosses
-the wire. Both `/admin/feed` and `/admin/feed-test` log to `feed_log` and —
-unlike `/feed` — skip cooldown/open-hours checks and do **not** touch the
-public `last_fed_at` or `fed_today`; they're told apart in `feed_log` by the
-`ip` column's prefix:
+the wire. Both `/admin/feed` and `/admin/feed-test` skip cooldown/open-hours
+checks and log to `feed_log`. A real `/admin/feed` updates public
+`last_fed_at`, while `/admin/feed-test` deliberately leaves it alone. Neither
+is included in `fed_today`; they're told apart by the `ip` column's prefix:
 
 - `admin:<ip>` — `/admin/feed`, the owner's real "feed now regardless"
-  bypass.
+  bypass; after dispensing, the public countdown restarts in full.
 - `admin_test:<ip>` — `/admin/feed-test`, for exercising the real dispense
   pipeline (HA call, recording trigger) on demand without it looking like
   either a real forced feed or a real visitor.
@@ -381,10 +382,16 @@ of `HH:MM-HH:MM` windows via `POST /admin/auto-feed` (stored in `state` key
 each window, **if nobody fed the cat during it**, triggers one auto-feed when it
 closes.
 
+An owner force-feed inside a configured window immediately marks that exact
+window handled, even when the window is longer than 120 minutes. The force-feed
+and scheduler share one lock, so a click right at the window boundary cannot
+race the scheduler into a duplicate dispense.
+
 Per window, once its end time has passed today and it hasn't been handled yet:
-- If `has_feed_in_window()` finds any `feed_event` in `[start, end]` (any
-  trigger — site, PetKit app, physical button), it's marked handled, no feed.
-- Else, within a `_GRACE_MINUTES` (60) grace after the end (so a service that
+- If `last_fed_at` is within one public cooldown of the window close, it's
+  marked handled with no feed. Owner force-feeds inside the window have already
+  marked it handled through the immediate path above.
+- Otherwise, within a `_GRACE_MINUTES` (60) grace after the end (so a service that
   was down through the window doesn't feed hours late), it dispenses: sets a
   `state.auto_feed_pending` marker, calls `ha.dispense()`, and records the feed
   via `record_feed(..., "auto:system", source="auto")`. Past the grace it's just
@@ -392,8 +399,8 @@ Per window, once its end time has passed today and it hasn't been handled yet:
 
 `auto_feed_handled` (`state`, a `{window: "YYYY-MM-DD"}` map) is persisted so a
 restart never re-fires a window already handled today. The auto-feed **does**
-advance the public cooldown (`record_feed` now advances `last_fed_at` for every
-source except `admin`), matching the "下次可以餵：120 分鐘後" message, and is
+advance the public cooldown (`record_feed` advances `last_fed_at` for every
+source except `admin_test`), matching the "下次可以餵：120 分鐘後" message, and is
 tagged `auto:` in `feed_log` so it's excluded from the "訪客餵食咗" count.
 
 The `feed_event` row for an auto-feed is created by the **recorder** (the sole

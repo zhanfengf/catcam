@@ -73,11 +73,11 @@ def get_last_fed_at() -> datetime | None:
 def record_feed(fed_at: datetime, ip: str | None, amount: int, source: str = "public") -> None:
     with _lock:
         conn = _db()
-        if source != "admin":
-            # admin (secret-channel) feeds must not push out the public
-            # cooldown; everything else that actually feeds the cat does —
-            # a real public feed AND the scheduled auto-feed both start the
-            # next 120-min window ("下次可以餵：120 分鐘後")
+        if source != "admin_test":
+            # Every real feed starts a fresh public cooldown, including an
+            # owner force-feed. The simulated admin test is the sole exception:
+            # it exercises the hardware/recording pipeline without changing
+            # the countdown visitors see.
             conn.execute(
                 "INSERT INTO state (key, value) VALUES ('last_fed_at', ?) "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value",

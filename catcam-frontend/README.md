@@ -35,13 +35,14 @@ WebSocket + MSE 經 `/camera/ws?src=petkit_h264` 重新 serve 出嚟。前端
 連續撳 logo 5 次會彈一個密碼 modal。密碼就係後端嘅 `ADMIN_TOKEN`。解鎖
 之後,前端用 Web Crypto（`crypto.subtle`）對請求做 HMAC-SHA256 簽名,解鎖
 之後有幾個功能：
-- `POST /admin/feed`：繞過冷卻時間同開放時段直接餵。呢個動作**唔會**影響
-  訪客見到嘅倒數——公開冷卻時間同「訪客餵食咗」次數都只跟 `/feed`（訪客觸發）
-  走，故意分開。強制餵完會自動 reload 返個紀錄清單。
+- `POST /admin/feed`：繞過當刻嘅冷卻時間同開放時段直接餵；成功出糧後會由
+  嗰一刻重新開始 120 分鐘公開冷卻，但唔計落「訪客餵食咗」次數。如果強制餵
+  發生喺一個自動餵食時段內，該時段會即時標記為已完成，結束時唔會重複出糧。
+  強制餵完會自動 reload 返個紀錄清單。
 - `POST /admin/feed-test`（🧪 模擬訪客出糧）：同樣繞過規則,一樣真係出糧、
   一樣會觸發餵食錄影,但用嚟測試成條 pipeline 行唔行得通,唔係代訪客餵——
   `feed_log` 入面用 `admin_test:` 標記,同 `/admin/feed` 嘅 `admin:` 分開,
-  兩個都唔計落「訪客餵食咗」。
+  唔計落「訪客餵食咗」，亦唔會改動公開冷卻倒數。
 - `POST /admin/announcement`（📢 公告欄）：一個 textarea + 儲存掣,設定/清空
   訪客一入站就見到嘅公告彈窗文字（留空即隱藏）。
 - `POST /admin/auto-feed`（🤖 自動餵食時段）：一個 textarea,每行一個
