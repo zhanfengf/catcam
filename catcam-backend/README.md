@@ -411,6 +411,13 @@ those as the 🤖 "冇人喺 …餵…自動餵咗" line (still two-phase — th
 follows). This keeps one event per real dispense (no duplicate) while still
 giving the auto-feed both its special message and a clip.
 
+Owner force-feeds use the same asynchronous detection path. A successful
+`POST /admin/feed` stores a short-lived `state.admin_feed_pending` marker; when
+the recorder sees the matching PetKit counter increase, it consumes that
+marker and writes `feed_event.source="admin"`. This keeps the activity event
+and its clip attached to the real dispense while avoiding the old generic
+`visitor` fallback for owner-triggered feeds.
+
 ## Deploy in the LXC (Debian 13, no Docker)
 
 ```bash

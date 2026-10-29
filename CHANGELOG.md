@@ -4,6 +4,12 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.18.1 — 強制餵食動態標記為 Admin（2026-10-29）
+
+- `e69e06d` `POST /admin/feed` 成功後新增短期 `admin_feed_pending` marker；Recorder 偵測到對應 PetKit 出糧時會寫 `feed_event.source="admin"`，不再錯誤落入 `visitor` fallback。冷卻、自動餵食防重複及錄影流程不變。
+- CT 114 現有、已確認由 Admin 強制餵食產生的 `feed_event ID 10`，由 `visitor` 修正為 `admin`。
+- 新增測試覆蓋 marker 只消耗一次、Recorder 分類，以及 Admin endpoint 寫入 marker。
+
 ## v0.18.0 — 強制餵貓重設公開冷卻並完成自動餵食時段（2026-10-29）
 
 - `2294920` 強制餵貓仍可繞過當刻嘅冷卻及開放時間，但成功出糧後會更新 `last_fed_at`，由該刻重新開始 120 分鐘公開冷卻；仍然用 `admin:<ip>` 排除喺「訪客餵食咗」統計之外。
