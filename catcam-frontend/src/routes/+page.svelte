@@ -108,6 +108,7 @@
       activityTitle: '餵食動態',
       activitySystem: '系統 / system',
       activityFedMsg: '🍚 啱啱餵咗 Roll Roll',
+      activityWetFoodMsg: '🥫🐟 啱啱餵咗 Roll Roll 食罐罐',
       activityFedPending: '錄影整緊…',
       activityClipMsg: '📹 錄影好咗',
       activityWatch: '睇返錄影',
@@ -201,6 +202,7 @@
       activityTitle: 'Feeding Activity',
       activitySystem: 'system',
       activityFedMsg: '🍚 Just fed Roll Roll',
+      activityWetFoodMsg: '🥫🐟 Just fed Roll Roll wet food',
       activityFedPending: 'clip rendering…',
       activityClipMsg: '📹 Clip ready',
       activityWatch: 'Watch clip',
@@ -827,6 +829,8 @@
                 <div class="activity-item-body">
                   {#if line.source === 'auto' && line.note}
                     {t.activityAutoMsg(line.note, status?.cooldown_minutes ?? 120)}
+                  {:else if line.source === 'admin_wet_food'}
+                    {t.activityWetFoodMsg}
                   {:else}
                     {t.activityFedMsg}
                   {/if}
