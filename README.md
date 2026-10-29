@@ -110,6 +110,17 @@ whatever `reason` the cooldown math already produces once `fasting` is back
 to `false` (`ok` if cooldown finished during the fast, `cooldown` with
 however much time is actually left if it hadn't).
 
+## Workflow diagram references
+
+These two reference images are saved for future study when documenting the
+CatCam architecture, events, database calls, and end-to-end program flow:
+
+- [`docs/references/workflow-common-symbols.png`](docs/references/workflow-common-symbols.png) — common workflow symbols: start/end, process, decision, and arrows.
+- [`docs/references/workflow-swimlane-example.png`](docs/references/workflow-swimlane-example.png) — a swimlane example showing how a process crosses different actors or systems.
+
+They are reference materials only, not diagrams of the current CatCam
+implementation.
+
 ## Camera streaming (and why it goes through the cloud)
 
 The camera here is a **PetKit YumShare Solo** — a smart feeder with a built-in
