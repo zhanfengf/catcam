@@ -81,6 +81,19 @@ activity, restarts the public cooldown, and covers any active auto-feed window,
 but deliberately has no PetKit dispense and no recording/pending-recording
 message.
 
+### Feeding records by source
+
+| 餵食方式 | `feed_log` | `feed_event` |
+| --- | --- | --- |
+| 網站訪客餵食 | ✅ | ✅ |
+| Admin 強制餵食 | ✅ | ✅ |
+| Admin 模擬出糧 | ✅ | ✅ |
+| CatCam 自動餵食 | ✅ | ✅ |
+| Admin 餵罐罐 | ✅ | ✅，但沒有錄影 |
+| PetKit App 出糧 | ❌ | ✅ |
+| 餵食機機身按鈕 | ❌ | ✅ |
+| PetKit 自己的排程 | ❌ | ✅ |
+
 <img src="docs/screenshots/feeding-activity.png" width="300" alt="Feeding activity feed: a 餵咗 message then a 錄影好咗 watch-back link per dispense">
 
 The hidden admin channel (tap the logo 5×, enter the password) unlocks a
