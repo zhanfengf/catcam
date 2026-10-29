@@ -31,6 +31,7 @@ service — the Home Assistant token stays here, never in the browser.
 | POST   | `/feed`               | Try to feed. Enforces all rules, then calls HA.          |
 | POST   | `/admin/feed`         | HMAC-signed bypass (cooldown + open hours); a successful force-feed starts a fresh public cooldown. |
 | POST   | `/admin/feed-test`    | HMAC-signed. Dispenses for real (tests the pipeline end to end) but excluded from the public cooldown and the "訪客餵食咗" count. |
+| POST   | `/admin/wet-food`     | HMAC-signed. Records an owner-served wet-food meal, restarts public cooldown, but does not call HA, dispense kibble, or record a clip. |
 | POST   | `/admin/announcement` | HMAC-signed. Sets (or clears, with `""`) the announcement banner text. |
 | POST   | `/admin/auto-feed`    | HMAC-signed. Sets the list of `HH:MM-HH:MM` auto-feed safety-net windows. |
 | GET    | `/admin/history`      | HMAC-signed. Today's feed events, straight from PetKit (not our own log). |
@@ -41,8 +42,9 @@ service — the Home Assistant token stays here, never in the browser.
 `POST /feed` returns `200` on success, `403` outside hours, `429` cooldown or
 spam, `502` if HA is unreachable.
 
-`POST /admin/feed`, `/admin/feed-test`, `/admin/announcement`, and `GET
-/admin/history` are the secret-channel endpoints the frontend calls after
+`POST /admin/feed`, `/admin/feed-test`, `/admin/wet-food`,
+`/admin/announcement`, and `GET /admin/history` are the secret-channel
+endpoints the frontend calls after
 unlocking (tap the logo 5×, enter `ADMIN_TOKEN`). Every request must be
 HMAC-SHA256 signed with `ADMIN_TOKEN` over `{METHOD}:{PATH}:{timestamp}` and
 include a timestamp within `ADMIN_SIG_WINDOW_SECONDS` — see
@@ -57,9 +59,12 @@ is included in `fed_today`; they're told apart by the `ip` column's prefix:
 - `admin_test:<ip>` — `/admin/feed-test`, for exercising the real dispense
   pipeline (HA call, recording trigger) on demand without it looking like
   either a real forced feed or a real visitor.
+- `admin_wet_food:<ip>` — `/admin/wet-food`, a real owner-served meal with
+  `amount=NULL` because no dry food leaves the feeder. It restarts the public
+  cooldown but is excluded from the visitor count.
 - no prefix — a real `/feed` call from a visitor.
 
-`count_feeds_today()` (the "訪客餵食咗" stat) excludes both prefixes.
+`count_feeds_today()` (the "訪客餵食咗" stat) excludes all admin prefixes.
 
 `/admin/history` doesn't read our own `feed_log` at all — it queries Home
 Assistant's history API for the PetKit device's `times_dispensed` counter,
@@ -349,7 +354,7 @@ one table:
 ## Activity feed (two-phase)
 
 A public, read-only feed shown beside the live video (the frontend's 餵食動態
-column). Each real dispense produces **two** chat-style messages about a minute
+column). Each real feeder dispense produces **two** chat-style messages about a minute
 apart: "🍚 餵咗 Roll Roll" the moment the feed is detected, then "📹 錄影好咗"
 with a watch-back link once the clip finishes rendering.
 
@@ -364,6 +369,14 @@ button, scheduled auto-feed), not just site-triggered ones:
   `clip_ready_at` on that same row (matched by `fed_at`) — the "錄影好咗" line.
   If the clip ultimately fails to render, the row just stays clip-less and only
   the "餵咗" line ever shows, which is the honest outcome.
+
+An owner-served wet-food meal is the intentional exception: `/admin/wet-food`
+does not touch Home Assistant or PetKit, so it inserts its own
+`feed_event.source="admin_wet_food"` row synchronously. The frontend shows the
+same "🍚 啱啱餵咗 Roll Roll" line immediately, but knows this source never
+expects a clip and therefore does not show "錄影整緊…". It does not appear in
+`/admin/history`, whose source of truth remains PetKit's physical dispense
+counter.
 
 `GET /activity` returns today's rows (newest-first); the frontend expands each
 into the two lines and sorts them by time. Old rows are pruned alongside the
@@ -382,10 +395,10 @@ of `HH:MM-HH:MM` windows via `POST /admin/auto-feed` (stored in `state` key
 each window, **if nobody fed the cat during it**, triggers one auto-feed when it
 closes.
 
-An owner force-feed inside a configured window immediately marks that exact
-window handled, even when the window is longer than 120 minutes. The force-feed
-and scheduler share one lock, so a click right at the window boundary cannot
-race the scheduler into a duplicate dispense.
+An owner force-feed or wet-food meal inside a configured window immediately
+marks that exact window handled, even when the window is longer than 120
+minutes. The owner action and scheduler share one lock, so a click right at the
+window boundary cannot race the scheduler into a duplicate dispense.
 
 Per window, once its end time has passed today and it hasn't been handled yet:
 - If `last_fed_at` is within one public cooldown of the window close, it's

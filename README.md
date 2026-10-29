@@ -76,12 +76,18 @@ button, or a scheduled auto-feed — posts two messages about a minute apart:
 "🍚 餵咗 Roll Roll" the instant it's detected, then "📹 錄影好咗" with a
 watch-back link once the 60-second clip finishes rendering.
 
+An admin-recorded wet-food meal appears immediately as the same "🍚 餵咗"
+activity, restarts the public cooldown, and covers any active auto-feed window,
+but deliberately has no PetKit dispense and no recording/pending-recording
+message.
+
 <img src="docs/screenshots/feeding-activity.png" width="300" alt="Feeding activity feed: a 餵咗 message then a 錄影好咗 watch-back link per dispense">
 
 The hidden admin channel (tap the logo 5×, enter the password) unlocks a
 force-feed button that bypasses the current rules but starts a fresh public
 cooldown after dispensing, a simulate-visitor test feed for exercising the
-pipeline without affecting the public cooldown or stats, an announcement banner,
+pipeline without affecting the public cooldown or stats, a wet-food button for
+logging an owner-served canned meal without dispensing kibble, an announcement banner,
 auto-feed safety-net windows
 (auto-feed a portion when a window closes if no one fed during it), and today's
 PetKit-side dispense history:

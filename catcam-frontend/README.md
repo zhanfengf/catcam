@@ -43,6 +43,11 @@ WebSocket + MSE 經 `/camera/ws?src=petkit_h264` 重新 serve 出嚟。前端
   一樣會觸發餵食錄影,但用嚟測試成條 pipeline 行唔行得通,唔係代訪客餵——
   `feed_log` 入面用 `admin_test:` 標記,同 `/admin/feed` 嘅 `admin:` 分開,
   唔計落「訪客餵食咗」，亦唔會改動公開冷卻倒數。
+- `POST /admin/wet-food`（🥫 餵罐罐）：記錄主人親手餵罐頭，唔 call Home
+  Assistant、唔會令 PetKit 出乾糧、唔會錄影。成功後即時新增
+  `feed_event.source="admin_wet_food"`、由當刻重新計 120 分鐘公開冷卻；如果
+  位於自動餵食時段，該時段會即時標記完成。按下後前端立即 reload
+  `/activity`，所以所有開住頁面嘅訪客最遲亦會喺原本 30 秒 poll 內見到。
 - `POST /admin/announcement`（📢 公告欄）：一個 textarea + 儲存掣,設定/清空
   訪客一入站就見到嘅公告彈窗文字（留空即隱藏）。
 - `POST /admin/auto-feed`（🤖 自動餵食時段）：一個 textarea,每行一個
@@ -79,7 +84,7 @@ WebSocket 連線狀態)係兩件完全唔同嘅嘢,唔好搞混。狀態截圖�
 ## 餵食動態欄（兩段式）
 
 直播畫面右邊一欄「餵食動態」（闊芒 ≥1100px 並排，窄芒疊喺畫面下面），唯讀，
-資料來自 `GET /activity`。每一次真實出糧會出**兩條**訊息：先喺偵測到嗰刻出
+資料來自 `GET /activity`。每一次餵食機真實出糧會出**兩條**訊息：先喺偵測到嗰刻出
 「🍚 餵咗 Roll Roll 錄影整緊…」，約一分鐘後錄影整好再出「📹 錄影好咗，睇返
 錄影 ›」（撳得，用返同資料卡一樣嘅 `/clips/<filename>.mp4` lightbox 播放器）。
 
@@ -96,6 +101,10 @@ WebSocket 連線狀態)係兩件完全唔同嘅嘢,唔好搞混。狀態截圖�
 `note` 係對應時段），個「餵咗」行就會換成 🤖「冇人喺 07:00-07:30 餵 Roll Roll，
 自動餵咗一份乾糧。下次可以餵：120 分鐘後」，之後一樣有「📹 錄影好咗」嗰條。
 `feed_event` 由後端重啟嗰刻先開始記，之前嘅餵食唔會追溯。
+
+`source="admin_wet_food"` 係例外：佢代表主人喺廚房親手餵罐頭，冇 PetKit
+dispense、冇錄影。前端只顯示一條「🍚 啱啱餵咗 Roll Roll」，唔會顯示「錄影
+整緊…」；亦唔會出現喺只讀 PetKit `times_dispensed` 嘅「今日餵食紀錄」。
 
 ## 資料卡（ⓘ）
 
