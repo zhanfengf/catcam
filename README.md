@@ -43,6 +43,43 @@ Each folder has its own README with setup and deployment details.
 - **Per-IP anti-spam** — stops a single client hammering the endpoint (separate from the feeding quota).
 - State (`last_fed_at`) is persisted in **SQLite**, so restarts keep the limits.
 
+### API 對照與 `/feed` 後端防線
+
+| 功能 | API | 主要規則 |
+| --- | --- | --- |
+| 訪客餵食 | `POST /feed` | 受開放時間及 120 分鐘 cooldown 限制 |
+| Admin 強制餵食 | `POST /admin/feed` | 繞過限制；成功後重設 120 分鐘 |
+| Admin 模擬出糧 | `POST /admin/feed-test` | 繞過限制；不改 cooldown |
+| Admin 餵罐罐 | `POST /admin/wet-food` | 繞過限制；重設 120 分鐘，但不出糧、不錄影 |
+| 設定公告 | `POST /admin/announcement` | Admin 簽署 |
+| 開啟禁食 | `POST /admin/fasting` | Admin 簽署 |
+| 解除禁食 | `POST /admin/fasting/clear` | Admin 簽署 |
+| 設定自動餵食 | `POST /admin/auto-feed` | Admin 簽署 |
+| 今日 PetKit 紀錄 | `GET /admin/history` | Admin 簽署 |
+
+直接呼叫公開的 `POST /feed` 亦不能繞過開放時間或 cooldown，因為後端會在
+呼叫 Home Assistant 前重新檢查：
+
+```text
+任何人直接 POST /feed
+          │
+          ▼
+每個 IP：60 秒最多 5 次
+          │
+          ▼
+取得資料庫 last_fed_at
+          │
+          ▼
+按香港時間重新檢查
+   ┌──────┴────────┐
+時間外             cooldown 中
+HTTP 403            HTTP 429
+不出糧              不出糧
+          │
+          ▼
+兩項都通過才呼叫 Home Assistant 出糧
+```
+
 ## Screenshots
 
 The feed button reflects exactly one state at a time — `GET /status` returns
