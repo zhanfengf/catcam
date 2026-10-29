@@ -99,7 +99,10 @@ Admin 在公開餵食時間外記錄餵罐罐後，系統會同時考慮「120 �
 | 不在開放時間 | `outside_hours` | <img src="docs/screenshots/feed-outside-hours.png" width="220" alt="餵食按鈕顯示距離開放時間的倒數"> |
 | 餵食機／Home Assistant 無法連線 | `ha_offline` | <img src="docs/screenshots/feed-ha-offline.png" width="220" alt="餵食機離線，按鈕停用"> |
 | 直播中斷 | `stream_offline` | <img src="docs/screenshots/feed-stream-offline.png" width="220" alt="直播中斷，按鈕停用"> |
-| Admin 開啟禁食模式 | `fasting` | 餵食按鈕停用，直播畫面上顯示禁食提示。這是最高優先狀態；即使同時出現 `ha_offline`／`stream_offline`，仍會顯示禁食，因為它是主人主動設定，而非系統故障。 |
+| Admin 開啟禁食模式 | `fasting` | <img src="docs/screenshots/feed-fasting.jpg" width="220" alt="Admin 開啟禁食模式，直播畫面顯示節食事態遮罩並停用餵食按鈕"> |
+
+禁食模式是最高優先狀態；即使同時出現 `ha_offline`／`stream_offline`，仍會顯示
+禁食畫面，因為它是主人主動設定，而非系統故障。
 
 後端會在背景定期查詢 Home Assistant，獨立判斷 `ha_offline`，不需要等訪客先嘗試
 餵食。HA 斷線後約 15 秒，按鈕便會自動停用，而不是等用戶按下才收到 502。
