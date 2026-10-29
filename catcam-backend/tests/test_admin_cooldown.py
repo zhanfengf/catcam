@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 from starlette.requests import Request
 
-from app import autofeed, db, main
+from app import autofeed, db, main, recorder
 
 
 HK = ZoneInfo("Asia/Hong_Kong")
@@ -48,6 +48,28 @@ class AdminCooldownDbTests(unittest.TestCase):
             {"05:00-08:00": "2026-10-29"},
         )
 
+    def test_force_feed_pending_marker_is_consumed_once(self):
+        forced = datetime(2026, 10, 29, 18, 37, tzinfo=HK)
+        detected = forced + timedelta(seconds=14)
+
+        db.set_admin_feed_pending(forced)
+
+        self.assertTrue(db.pop_admin_feed_pending(detected, 90))
+        self.assertFalse(db.pop_admin_feed_pending(detected, 90))
+
+    def test_recorder_resolves_force_feed_as_admin(self):
+        detected = datetime(2026, 10, 29, 18, 37, 14, tzinfo=HK)
+
+        with (
+            patch.object(recorder.db, "pop_auto_feed_pending", return_value=None),
+            patch.object(recorder.db, "pop_admin_feed_pending", return_value=True),
+            patch.object(recorder.db, "pop_visitor_feed_pending") as pop_visitor,
+        ):
+            source, note, visitor = recorder._resolve_feed_source(detected)
+
+        self.assertEqual((source, note, visitor), ("admin", None, None))
+        pop_visitor.assert_not_called()
+
 
 class AdminEndpointTests(unittest.IsolatedAsyncioTestCase):
     async def test_force_feed_marks_window_and_returns_fresh_cooldown(self):
@@ -67,6 +89,7 @@ class AdminEndpointTests(unittest.IsolatedAsyncioTestCase):
             patch.object(main, "now", return_value=forced),
             patch.object(main.ha, "dispense", new_callable=AsyncMock),
             patch.object(main.db, "record_feed") as record_feed,
+            patch.object(main.db, "set_admin_feed_pending") as set_admin_pending,
             patch.object(main.autofeed, "mark_windows_covered") as mark_covered,
             patch.object(main.db, "get_last_fed_at", return_value=forced),
             patch.object(main, "build_status", return_value=status),
@@ -74,6 +97,7 @@ class AdminEndpointTests(unittest.IsolatedAsyncioTestCase):
             result = await main.admin_feed(request)
 
         record_feed.assert_called_once_with(forced, "admin:203.0.113.4", 10, source="admin")
+        set_admin_pending.assert_called_once_with(forced)
         mark_covered.assert_called_once_with(forced)
         self.assertEqual(result["seconds_until_next"], 7200)
 

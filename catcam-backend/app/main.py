@@ -199,6 +199,10 @@ async def admin_feed(request: Request):
 
             fed_at = now()
             db.record_feed(fed_at, f"admin:{ip}", s.feed_amount, source="admin")
+            # The recorder sees the PetKit counter increase asynchronously.
+            # Leave it a short-lived marker so the corresponding feed_event
+            # is tagged as admin instead of the generic visitor fallback.
+            db.set_admin_feed_pending(fed_at)
             # Force-feed bypasses the cooldown that was already running, but
             # the successful dispense becomes the new public cooldown anchor.
             # Mark any containing auto-feed window covered before releasing

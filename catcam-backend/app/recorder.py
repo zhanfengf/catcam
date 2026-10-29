@@ -198,6 +198,23 @@ def list_recordings() -> list[dict]:
     return items
 
 
+def _resolve_feed_source(when: datetime) -> tuple[str, str | None, dict | None]:
+    """Consume pending trigger metadata for one detected PetKit dispense.
+
+    Auto-feed wins first because it carries a window note; an owner force-feed
+    is next; a genuine site visitor carries notification metadata. Anything
+    else keeps the historical ``visitor`` fallback used for PetKit app and
+    physical-button dispenses.
+    """
+    auto_window = db.pop_auto_feed_pending(when, 90)
+    if auto_window:
+        return "auto", auto_window, None
+    if db.pop_admin_feed_pending(when, 90):
+        return "admin", None, None
+    visitor = db.pop_visitor_feed_pending(when, 90)
+    return "visitor", None, visitor
+
+
 async def _poll_loop() -> None:
     async with httpx.AsyncClient() as client:
         # baseline on startup — don't treat whatever today's count already
@@ -214,14 +231,11 @@ async def _poll_loop() -> None:
                 # site can show it ~1 min before the clip finishes rendering.
                 # if the scheduler just dispensed (marker set <90s ago), tag
                 # this event as that auto-feed so the feed shows the 🤖 line
-                auto_window = db.pop_auto_feed_pending(when, 90)
-                # a genuine site /feed also left an IP+country marker; app /
-                # physical-button / admin dispenses leave neither
-                visitor = None if auto_window else db.pop_visitor_feed_pending(when, 90)
+                source, note, visitor = _resolve_feed_source(when)
                 db.add_feed_event(
                     when,
-                    source="auto" if auto_window else "visitor",
-                    note=auto_window,
+                    source=source,
+                    note=note,
                 )
                 asyncio.create_task(_record_clip(when, visitor))
             last_val = val

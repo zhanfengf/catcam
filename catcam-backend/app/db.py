@@ -246,6 +246,33 @@ def pop_auto_feed_pending(now: datetime, within_seconds: int) -> str | None:
     return None
 
 
+def set_admin_feed_pending(at: datetime) -> None:
+    """Mark a successful owner force-feed so the recorder can tag the
+    matching PetKit dispense as ``source=admin`` instead of falling back to
+    ``visitor``."""
+    _set_state("admin_feed_pending", at.isoformat())
+
+
+def pop_admin_feed_pending(now: datetime, within_seconds: int) -> bool:
+    """Consume a fresh owner force-feed marker.
+
+    The recorder observes the PetKit counter asynchronously, so the marker is
+    kept in ``state`` across process restarts and accepted only for a short
+    window. Stale or invalid values are cleared rather than being allowed to
+    mislabel a later dispense.
+    """
+    raw = _get_state("admin_feed_pending", "")
+    if not raw:
+        return False
+    try:
+        at = datetime.fromisoformat(raw)
+    except ValueError:
+        _set_state("admin_feed_pending", "")
+        return False
+    _set_state("admin_feed_pending", "")
+    return (now - at).total_seconds() <= within_seconds
+
+
 def set_visitor_feed_pending(ip: str | None, country: str | None, at: datetime) -> None:
     """Stash a web visitor's IP + country at /feed time so the recorder can
     attach them to the matching dispense (and push a Telegram alert). Only the
