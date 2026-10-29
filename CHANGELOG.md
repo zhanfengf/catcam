@@ -4,6 +4,10 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.19.2 — 餵罐罐按鈕統一使用罐頭魚 emoji（2026-10-30）
+
+- `9870a2a` 秘密通道按鈕由 `🥫` 改為 `🥫🐟`：中文顯示「🥫🐟 餵罐罐（唔出乾糧）」；英文顯示「🥫🐟 Feed Wet Food (no kibble)」。既有 Admin 規則不變：可在時間外或 cooldown 中按，成功後重設 120 分鐘，不出乾糧、不錄影。
+
 ## v0.19.1 — 餵罐罐使用專屬動態（2026-10-29）
 
 - `cb3f551` `admin_wet_food` 餵食動態改用專屬文字「🥫🐟 啱啱餵咗 Roll Roll 食罐罐」，英文介面同步顯示「🥫🐟 Just fed Roll Roll wet food」；一般乾糧事件維持「🍚 啱啱餵咗 Roll Roll」。

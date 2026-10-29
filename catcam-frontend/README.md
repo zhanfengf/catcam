@@ -43,7 +43,7 @@ WebSocket + MSE 經 `/camera/ws?src=petkit_h264` 重新 serve 出嚟。前端
   一樣會觸發餵食錄影,但用嚟測試成條 pipeline 行唔行得通,唔係代訪客餵——
   `feed_log` 入面用 `admin_test:` 標記,同 `/admin/feed` 嘅 `admin:` 分開,
   唔計落「訪客餵食咗」，亦唔會改動公開冷卻倒數。
-- `POST /admin/wet-food`（🥫 餵罐罐）：記錄主人親手餵罐頭，唔 call Home
+- `POST /admin/wet-food`（🥫🐟 餵罐罐）：記錄主人親手餵罐頭，唔 call Home
   Assistant、唔會令 PetKit 出乾糧、唔會錄影。成功後即時新增
   `feed_event.source="admin_wet_food"`、由當刻重新計 120 分鐘公開冷卻；如果
   位於自動餵食時段，該時段會即時標記完成。按下後前端立即 reload
