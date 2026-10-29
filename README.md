@@ -76,10 +76,10 @@ button, or a scheduled auto-feed — posts two messages about a minute apart:
 "🍚 餵咗 Roll Roll" the instant it's detected, then "📹 錄影好咗" with a
 watch-back link once the 60-second clip finishes rendering.
 
-An admin-recorded wet-food meal appears immediately as the same "🍚 餵咗"
-activity, restarts the public cooldown, and covers any active auto-feed window,
-but deliberately has no PetKit dispense and no recording/pending-recording
-message.
+An admin-recorded wet-food meal appears immediately as
+"🥫🐟 啱啱餵咗 Roll Roll 食罐罐", restarts the public cooldown, and covers any
+active auto-feed window, but deliberately has no PetKit dispense and no
+recording/pending-recording message.
 
 ### Feeding records by source
 

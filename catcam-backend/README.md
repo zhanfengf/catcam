@@ -373,8 +373,8 @@ button, scheduled auto-feed), not just site-triggered ones:
 An owner-served wet-food meal is the intentional exception: `/admin/wet-food`
 does not touch Home Assistant or PetKit, so it inserts its own
 `feed_event.source="admin_wet_food"` row synchronously. The frontend shows the
-same "🍚 啱啱餵咗 Roll Roll" line immediately, but knows this source never
-expects a clip and therefore does not show "錄影整緊…". It does not appear in
+dedicated "🥫🐟 啱啱餵咗 Roll Roll 食罐罐" line immediately, but knows this
+source never expects a clip and therefore does not show "錄影整緊…". It does not appear in
 `/admin/history`, whose source of truth remains PetKit's physical dispense
 counter.
 

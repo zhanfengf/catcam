@@ -4,6 +4,10 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.19.1 — 餵罐罐使用專屬動態（2026-10-29）
+
+- `cb3f551` `admin_wet_food` 餵食動態改用專屬文字「🥫🐟 啱啱餵咗 Roll Roll 食罐罐」，英文介面同步顯示「🥫🐟 Just fed Roll Roll wet food」；一般乾糧事件維持「🍚 啱啱餵咗 Roll Roll」。
+
 ## v0.19.0 — Admin 餵罐罐（2026-10-29）
 
 - `9529248` 秘密通道新增「🥫 餵罐罐」：`POST /admin/wet-food` 只記錄主人親手餵罐頭，完全唔 call Home Assistant、唔出乾糧、唔啟動錄影；寫入 `feed_log`（`amount=NULL`、`admin_wet_food:` 前綴）及 `feed_event.source="admin_wet_food"`。

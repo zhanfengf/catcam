@@ -103,8 +103,8 @@ WebSocket 連線狀態)係兩件完全唔同嘅嘢,唔好搞混。狀態截圖�
 `feed_event` 由後端重啟嗰刻先開始記，之前嘅餵食唔會追溯。
 
 `source="admin_wet_food"` 係例外：佢代表主人喺廚房親手餵罐頭，冇 PetKit
-dispense、冇錄影。前端只顯示一條「🍚 啱啱餵咗 Roll Roll」，唔會顯示「錄影
-整緊…」；亦唔會出現喺只讀 PetKit `times_dispensed` 嘅「今日餵食紀錄」。
+dispense、冇錄影。前端只顯示一條「🥫🐟 啱啱餵咗 Roll Roll 食罐罐」，唔會
+顯示「錄影整緊…」；亦唔會出現喺只讀 PetKit `times_dispensed` 嘅「今日餵食紀錄」。
 
 ## 資料卡（ⓘ）
 
