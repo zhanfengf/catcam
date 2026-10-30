@@ -273,6 +273,7 @@
   }
 
   let status = null;
+  $: displayTitle = status?.preview_mode ? `${t.title}(dev)` : t.title;
   let feeding = false;
   let localSecs = 0;
   let toast = null;
@@ -787,7 +788,7 @@
 </script>
 
 <svelte:head>
-  <title>{t.title}</title>
+  <title>{displayTitle}</title>
 </svelte:head>
 
 <main>
@@ -800,7 +801,7 @@
       <!-- svelte-ignore a11y-no-static-element-interactions -->
       <span class="logo" on:click={onLogoClick}>🐱</span>
       <div class="brand-title">
-        <h1>{t.title}</h1>
+        <h1>{displayTitle}</h1>
         <button class="info-btn" on:click={openInfoModal} aria-label={t.infoLabel}>ⓘ</button>
       </div>
     </div>
