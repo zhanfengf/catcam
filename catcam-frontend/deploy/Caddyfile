@@ -10,7 +10,7 @@ http://cat.kelvinp.work {
 	}
 
 	# API endpoints -> uvicorn on 127.0.0.1:8080
-	@api path /status /feed /health /admin/feed /admin/feed-test /admin/wet-food /admin/announcement /admin/auto-feed /admin/fasting /admin/fasting/clear /admin/history /recordings /activity
+	@api path /status /feed /health /admin/feed /admin/feed-test /admin/wet-food /admin/cooldown /admin/announcement /admin/auto-feed /admin/fasting /admin/fasting/clear /admin/history /recordings /activity
 	handle @api {
 		reverse_proxy 127.0.0.1:8080
 	}
@@ -52,7 +52,7 @@ http://cat-preview.kelvinp.work {
 		format console
 	}
 
-	@api path /status /feed /health /admin/feed /admin/feed-test /admin/wet-food /admin/announcement /admin/auto-feed /admin/fasting /admin/fasting/clear /admin/history /recordings /activity
+	@api path /status /feed /health /admin/feed /admin/feed-test /admin/wet-food /admin/cooldown /admin/announcement /admin/auto-feed /admin/fasting /admin/fasting/clear /admin/history /recordings /activity
 	handle @api {
 		reverse_proxy 127.0.0.1:8081
 	}
