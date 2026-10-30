@@ -262,6 +262,11 @@ ffmpeg 會持續寫出包含數據的約 5 秒片段；`stream_online()` 只需�
 fire-and-forget，Telegram 不會阻塞監察 loop；未設定憑證時則完全 no-op，
 看門狗仍會靜默偵測及自動修復。
 
+Backend 啟動時會安裝敏感 URL logging filter。即使 `httpx` 或通知模組記錄完整
+Telegram API request URL，bot token 亦會先被改寫成
+`https://api.telegram.org/bot[REDACTED]/...` 才輸出到 systemd journal，避免日後
+查閱或匯出 journal 時洩漏憑證。這項處理只影響 log 文字，不會改動實際 API request。
+
 設定方法：
 
 1. 在 Telegram 向 **@BotFather** 發送 `/newbot`，再複製 bot **token**。

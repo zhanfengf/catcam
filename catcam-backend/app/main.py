@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from . import autofeed, buffer, db, feedwatch, ha, highlights, recorder, streamwatch
 from .config import get_settings
+from .logging_utils import install_sensitive_log_filter
 from .ratelimit import check_ip
 from .scheduling import build_status, day_start, now
 
@@ -19,6 +20,7 @@ from .scheduling import build_status, day_start, now
 # to WARNING with no handler attached, so journalctl only ever shows uvicorn's
 # own access/error lines, never the app's own INFO breadcrumbs.
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+install_sensitive_log_filter()
 
 _feed_lock = asyncio.Lock()
 
