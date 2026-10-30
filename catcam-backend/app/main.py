@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import autofeed, buffer, db, ha, highlights, recorder, streamwatch
+from . import autofeed, buffer, db, feedwatch, ha, highlights, recorder, streamwatch
 from .config import get_settings
 from .ratelimit import check_ip
 from .scheduling import build_status, day_start, now
@@ -32,9 +32,11 @@ async def lifespan(app: FastAPI):
     highlights.start()
     ha.start()
     autofeed.start()
+    feedwatch.start()
     streamwatch.start()
     yield
     streamwatch.stop()
+    feedwatch.stop()
     autofeed.stop()
     ha.stop()
     recorder.stop()

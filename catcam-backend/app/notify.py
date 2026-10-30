@@ -7,13 +7,15 @@ from .config import get_settings
 log = logging.getLogger("catcam.notify")
 
 
-async def send(text: str) -> None:
+async def send(text: str) -> bool:
     """Push a short message to Telegram. No-op (and never raises) when the bot
     token / chat id aren't configured, so the rest of the app doesn't care
-    whether notifications are turned on."""
+    whether notifications are turned on. Returns True only when Telegram
+    accepts the message, so callers that de-duplicate alerts can persist their
+    marker after a confirmed send."""
     s = get_settings()
     if not s.telegram_bot_token or not s.telegram_chat_id:
-        return
+        return False
     url = f"https://api.telegram.org/bot{s.telegram_bot_token}/sendMessage"
     try:
         # CT 114 resolves api.telegram.org to an IPv6 address but has no IPv6
@@ -29,5 +31,8 @@ async def send(text: str) -> None:
         if resp.status_code >= 400:
             log.warning("telegram sendMessage %s: %s",
                         resp.status_code, resp.text[:200])
+            return False
+        return True
     except httpx.RequestError as exc:
         log.warning("telegram notify failed: %s", exc)
+        return False

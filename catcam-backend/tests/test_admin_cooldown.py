@@ -94,6 +94,18 @@ class AdminCooldownDbTests(unittest.TestCase):
             "note": None,
         })
 
+    def test_latest_feed_event_uses_newest_timestamp_from_every_source(self):
+        first = datetime(2026, 10, 29, 23, 30, tzinfo=HK)
+        latest = datetime(2026, 10, 30, 6, 0, tzinfo=HK)
+        db.add_feed_event(first, source="visitor")
+        db.add_feed_event(latest, source="auto", note="05:30-06:00")
+
+        result = db.get_latest_feed_event()
+
+        self.assertEqual(result["fed_at"], latest.isoformat())
+        self.assertEqual(result["source"], "auto")
+        self.assertEqual(result["note"], "05:30-06:00")
+
 
 class AdminEndpointTests(unittest.IsolatedAsyncioTestCase):
     async def test_force_feed_marks_window_and_returns_fresh_cooldown(self):

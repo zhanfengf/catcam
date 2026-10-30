@@ -177,6 +177,23 @@ def get_feed_events(since: datetime) -> list[dict]:
     ]
 
 
+def get_latest_feed_event() -> dict | None:
+    """Return the newest activity event, regardless of source or time of day."""
+    with _lock:
+        row = _db().execute(
+            "SELECT id, fed_at, source, note FROM feed_event "
+            "ORDER BY fed_at DESC, id DESC LIMIT 1"
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "fed_at": row[1],
+        "source": row[2] or "visitor",
+        "note": row[3],
+    }
+
+
 def has_feed_in_window(start: datetime, end: datetime) -> bool:
     with _lock:
         row = _db().execute(
@@ -225,6 +242,14 @@ def get_auto_feed_handled() -> dict:
 
 def set_auto_feed_handled(handled: dict) -> None:
     _set_state("auto_feed_handled", json.dumps(handled))
+
+
+def get_feed_inactivity_alert_key() -> str:
+    return _get_state("feed_inactivity_alert_key", "")
+
+
+def set_feed_inactivity_alert_key(key: str) -> None:
+    _set_state("feed_inactivity_alert_key", key)
 
 
 def set_auto_feed_pending(window: str, at: datetime) -> None:

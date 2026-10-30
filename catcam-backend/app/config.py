@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     # Clip links are built off this public base.
     notify_visitor_feeds: bool = True
     notify_auto_feeds: bool = True
+    # During public hours, warn the owner once when the newest feed_event is
+    # this many real hours old. Events outside public hours still reset it.
+    feed_inactivity_alert_enabled: bool = True
+    feed_inactivity_alert_hours: float = 5.0
     public_base_url: str = "https://cat.kelvinp.work"
 
     @property

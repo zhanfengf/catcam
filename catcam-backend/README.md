@@ -298,6 +298,28 @@ CatCam 自動餵食安全網成功出糧後，recorder 會照常製作餵食影�
 通知共用 `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` 及 `PUBLIC_BASE_URL`；設定
 `notify_auto_feeds=false` 可單獨關閉自動餵食通知，而不影響訪客餵食或直播中斷通知。
 
+### 連續 5 小時沒有餵食提示（Telegram）
+
+`app/feedwatch.py` 每 60 秒讀取最新一筆 `feed_event`。事件來源不受公開餵食時間
+限制：網站訪客、Admin、餵罐罐、CatCam 自動餵食、PetKit App、機身按鈕及 PetKit
+排程都會重設 5 小時計時。因此即使 06:00 的自動餵食發生在公開時間外，只要之後
+沒有新事件，提示時間便是 11:00，而不是由 07:00 重新起計。
+
+Telegram 只會在公開餵食時間內發送；如果 5 小時門檻在凌晨達到，會延至下一次
+公開時間開始才通知。同一筆最後餵食只提醒一次，成功發送後以
+`state.feed_inactivity_alert_key` 保存對應 `feed_event.id`；有新事件後才會啟動下一輪。
+如果 Telegram 拒絕或連線失敗，系統不會寫入去重 key，下一次檢查仍會重試。
+
+```
+⚠️ Roll Roll 已經連續 5 小時冇餵食紀錄
+🕐 最後餵食：2026-10-30 06:00
+🍚 請檢查糧兜、餵食機同 Roll Roll
+```
+
+設定 `feed_inactivity_alert_enabled=false` 可停用；門檻可用
+`feed_inactivity_alert_hours` 調整。監察器只讀取 `feed_event`，不會自行出糧、改動
+`last_fed_at`、cooldown 或自動餵食時段。
+
 ## 公告欄
 
 主人可以向所有訪客發送自由文字公告。每段不同訊息會在頁面載入時顯示一次。
