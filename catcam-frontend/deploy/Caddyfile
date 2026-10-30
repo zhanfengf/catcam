@@ -2,7 +2,7 @@
 # Install Caddy in the CT, put the built `build/` folder at /opt/catcam-frontend,
 # then point Cloudflare Tunnel route cat.kelvinp.work -> 192.168.99.147:80
 
-:80 {
+http://cat.kelvinp.work {
 	encode gzip
 	log {
 		output stdout
@@ -37,6 +37,38 @@
 	# Everything else -> static SvelteKit build (SPA fallback to index.html)
 	handle {
 		root * /opt/catcam-frontend/build
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+# Fully isolated development site. Its API runs on 8081 with PREVIEW_MODE=true,
+# a separate SQLite database, and no HA or Telegram credentials. The camera is
+# read-only and may be shared so visual work can still use a realistic layout.
+http://cat-preview.kelvinp.work {
+	encode gzip
+	log {
+		output stdout
+		format console
+	}
+
+	@api path /status /feed /health /admin/feed /admin/feed-test /admin/wet-food /admin/announcement /admin/auto-feed /admin/fasting /admin/fasting/clear /admin/history /recordings /activity
+	handle @api {
+		reverse_proxy 127.0.0.1:8081
+	}
+
+	handle_path /clips/* {
+		root * /opt/catcam-preview/data/recordings
+		file_server
+	}
+
+	handle_path /camera/* {
+		rewrite * /api{path}
+		reverse_proxy 127.0.0.1:1984
+	}
+
+	handle {
+		root * /opt/catcam-preview/frontend/build
 		try_files {path} /index.html
 		file_server
 	}

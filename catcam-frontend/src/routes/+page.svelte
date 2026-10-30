@@ -24,6 +24,7 @@
   const translations = {
     zh: {
       title: 'Roll Roll直播',
+      previewBanner: '模擬環境｜所有餵食只寫入測試資料，不會控制真正餵食機',
       live: '直播中',
       liveOffline: '離線',
       feedBtnFeeding: '餵緊…',
@@ -126,6 +127,7 @@
     },
     en: {
       title: 'Roll Roll Live',
+      previewBanner: 'PREVIEW｜All feeds use test data and never control the real feeder',
       live: 'LIVE',
       liveOffline: 'Offline',
       feedBtnFeeding: 'Feeding…',
@@ -789,6 +791,9 @@
 </svelte:head>
 
 <main>
+  {#if status?.preview_mode}
+    <div class="preview-banner" role="status">{t.previewBanner}</div>
+  {/if}
   <header>
     <div class="brand">
       <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -1205,6 +1210,23 @@
 {/if}
 
 <style>
+  .preview-banner {
+    position: sticky;
+    top: 8px;
+    z-index: 30;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 14px;
+    border: 2px solid #b45309;
+    border-radius: 12px;
+    background: #fffbeb;
+    color: #78350f;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1.4;
+    text-align: center;
+    box-shadow: 0 6px 20px rgba(120, 53, 15, 0.16);
+  }
   main {
     max-width: 560px;
     margin: 0 auto;

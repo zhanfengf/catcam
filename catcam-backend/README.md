@@ -22,6 +22,18 @@
 - `fed_today`（顯示為「訪客餵食咗」／`Fed by visitors`）**只計公開訪客餵食**；
   所有 Admin 通道餵食均刻意排除。
 
+## Preview 模擬模式
+
+`PREVIEW_MODE=true` 專供 `cat-preview.kelvinp.work`。服務使用獨立工作目錄、port
+`8081` 及 SQLite，並在 systemd 明確覆寫 `HA_URL`、`HA_TOKEN`、Telegram token
+為空。lifespan 只啟動自動餵食 scheduler，不會啟動 HA polling、buffer、recorder、
+highlights、feedwatch 或 streamwatch。
+
+Preview 的 `/feed`、`/admin/feed`、`/admin/feed-test` 和 scheduler 會直接在 Preview
+DB 建立模擬 `feed_log`／`feed_event`，永遠不呼叫 `ha.dispense()`。`/status` 回傳
+`preview_mode: true` 供 Frontend 顯示永久警告；`/admin/history` 亦只讀 Preview
+事件。Production 預設 `PREVIEW_MODE=false`，行為維持不變。
+
 ## API 路徑
 
 | 方法 | 路徑 | 用途 |

@@ -17,6 +17,16 @@ SvelteKit 前端  ──►  FastAPI 後端  ──►  Home Assistant REST API 
 go2rtc (WebSocket + MSE)  ──►  Home Assistant WHEP  ──►  📷 PetKit 相機
 ```
 
+### 隔離 Preview 環境
+
+新功能先部署到 `cat-preview.kelvinp.work` 驗收，不直接改動正式
+`cat.kelvinp.work`。Preview 使用 port `8081`、獨立
+`/opt/catcam-preview/data/catcam-preview.db`，並以 `PREVIEW_MODE=true` 運行。
+它不載入 HA 或 Telegram 憑證，不啟動 recorder、buffer、streamwatch、highlights
+或 feedwatch；所有訪客／Admin／自動餵食都只寫入 Preview DB。畫面頂部會固定顯示
+「模擬環境」警告。直播可共用唯讀 go2rtc 畫面，但任何 Preview endpoint 都沒有
+控制真實餵食機的路徑。
+
 ## 製作原因
 
 我想以家中的相機及智能餵食機，製作一個小型但完整、真正連接硬件的全端專案，

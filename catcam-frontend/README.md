@@ -36,6 +36,11 @@ WebSocket + MSE 經 `/camera/ws?src=petkit_h264` 重新 serve 出嚟。前端
 連續撳 logo 5 次會彈一個密碼 modal。密碼就係後端嘅 `ADMIN_TOKEN`。解鎖
 之後,前端用 Web Crypto（`crypto.subtle`）對請求做 HMAC-SHA256 簽名,解鎖
 之後有幾個功能：
+
+開發版部署在 `cat-preview.kelvinp.work`，使用獨立 Backend／DB。當 `/status`
+回傳 `preview_mode: true`，頁頂會固定顯示「模擬環境」警告；所有餵食按鈕只建立
+測試紀錄，不會接觸真正餵食機。Preview 可共用唯讀直播畫面，方便用真實版面測試。
+
 - `POST /admin/feed`：繞過當刻嘅冷卻時間同開放時段直接餵；成功出糧後會由
   嗰一刻重新開始 120 分鐘公開冷卻，但唔計落「訪客餵食咗」次數。如果強制餵
   發生喺一個自動餵食時段內，該時段會即時標記為已完成，結束時唔會重複出糧。

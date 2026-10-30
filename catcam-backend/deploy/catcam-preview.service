@@ -1,0 +1,34 @@
+[Unit]
+Description=CatCam Preview API (isolated simulation)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=catcam
+WorkingDirectory=/opt/catcam-preview/backend
+# Reuse only the Admin signature secret and harmless display settings. Every
+# hardware, notification and storage setting below overrides the production
+# file, so Preview has no route to the real feeder or production database.
+EnvironmentFile=/opt/catcam-backend/.env
+Environment=PREVIEW_MODE=true
+Environment=DB_PATH=/opt/catcam-preview/data/catcam-preview.db
+Environment=HA_URL=
+Environment=HA_TOKEN=
+Environment=TELEGRAM_BOT_TOKEN=
+Environment=TELEGRAM_CHAT_ID=
+Environment=NOTIFY_VISITOR_FEEDS=false
+Environment=NOTIFY_AUTO_FEEDS=false
+Environment=FEED_INACTIVITY_ALERT_ENABLED=false
+Environment=STREAM_AUTO_RECOVER=false
+Environment=RECORDINGS_DIR=/opt/catcam-preview/data/recordings
+Environment=HIGHLIGHTS_DIR=/opt/catcam-preview/data/highlights
+Environment=BUFFER_DIR=/opt/catcam-preview/data/buffer
+Environment=GO2RTC_RESTART_TRIGGER=/opt/catcam-preview/data/go2rtc-restart.trigger
+Environment=PUBLIC_BASE_URL=https://cat-preview.kelvinp.work
+ExecStart=/opt/catcam-backend/catvenv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8081 --workers 1
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

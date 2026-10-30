@@ -15,7 +15,7 @@ from app import autofeed, db, main, recorder
 HK = ZoneInfo("Asia/Hong_Kong")
 
 
-class AdminCooldownDbTests(unittest.TestCase):
+class AdminCooldownDbTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory()
         db.init_db(str(Path(self.tempdir.name) / "catcam.db"))
@@ -98,6 +98,27 @@ class AdminCooldownDbTests(unittest.TestCase):
             "05:30-06:00": "2026-10-30",
             "11:30-12:00": "2026-10-30",
         })
+
+    async def test_preview_auto_feed_writes_event_without_home_assistant(self):
+        db.set_auto_feed_windows(["07:00-07:30"])
+        checked_at = datetime(2026, 10, 30, 7, 31, tzinfo=HK)
+        settings = SimpleNamespace(
+            preview_mode=True,
+            cooldown_minutes=120,
+            feed_amount=10,
+        )
+
+        with (
+            patch.object(autofeed, "get_settings", return_value=settings),
+            patch.object(autofeed, "now", return_value=checked_at),
+            patch.object(autofeed.ha, "dispense", new_callable=AsyncMock) as dispense,
+        ):
+            await autofeed._check_once_locked()
+
+        dispense.assert_not_awaited()
+        self.assertEqual(db.get_last_fed_at(), checked_at)
+        self.assertEqual(db.get_latest_feed_event()["source"], "auto")
+        self.assertEqual(db.get_latest_feed_event()["note"], "07:00-07:30")
 
     def test_force_feed_pending_marker_is_consumed_once(self):
         forced = datetime(2026, 10, 29, 18, 37, tzinfo=HK)
@@ -217,6 +238,45 @@ class AdminEndpointTests(unittest.IsolatedAsyncioTestCase):
             saved_at,
         )
         self.assertEqual(result["starts_tomorrow"], ["11:30-12:00"])
+
+    async def test_preview_public_feed_never_calls_home_assistant(self):
+        request = Request({
+            "type": "http",
+            "method": "POST",
+            "path": "/feed",
+            "headers": [],
+            "client": ("203.0.113.4", 12345),
+        })
+        fed_at = datetime(2026, 10, 30, 12, 0, tzinfo=HK)
+        settings = SimpleNamespace(
+            preview_mode=True,
+            client_ip_header="cf-connecting-ip",
+        )
+        ready = {"can_feed": True, "amount": 10}
+        cooldown = {"can_feed": False, "reason": "cooldown"}
+
+        with (
+            patch.object(main, "check_ip", return_value=True),
+            patch.object(main, "get_settings", return_value=settings),
+            patch.object(main.db, "get_last_fed_at", side_effect=[None, fed_at]),
+            patch.object(main, "build_status", side_effect=[ready, cooldown]),
+            patch.object(main, "now", return_value=fed_at),
+            patch.object(main.ha, "dispense", new_callable=AsyncMock) as dispense,
+            patch.object(main.db, "record_feed") as record_feed,
+            patch.object(main.db, "add_feed_event") as add_feed_event,
+            patch.object(main.db, "set_visitor_feed_pending") as set_pending,
+        ):
+            result = await main.feed(request)
+
+        dispense.assert_not_awaited()
+        record_feed.assert_called_once_with(fed_at, "203.0.113.4", 10)
+        add_feed_event.assert_called_once_with(
+            fed_at,
+            source="visitor",
+            note="preview",
+        )
+        set_pending.assert_not_called()
+        self.assertTrue(result["ok"])
 
     async def test_force_feed_marks_window_and_returns_fresh_cooldown(self):
         forced = datetime(2026, 10, 29, 5, 45, tzinfo=HK)

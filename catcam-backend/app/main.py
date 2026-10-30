@@ -27,6 +27,13 @@ _feed_lock = asyncio.Lock()
 async def lifespan(app: FastAPI):
     s = get_settings()
     db.init_db(s.db_path)
+    if s.preview_mode:
+        # Preview only runs the scheduler against its isolated DB. It never
+        # starts HA polling, video capture, recovery, highlights or Telegram.
+        autofeed.start()
+        yield
+        autofeed.stop()
+        return
     buffer.start()
     recorder.start()
     highlights.start()
@@ -83,11 +90,13 @@ def verify_admin_signature(method: str, path: str, timestamp: str, signature: st
 
 @app.get("/status")
 async def status():
+    s = get_settings()
     last = db.get_last_fed_at()
     body = build_status(last)
     body["fed_today"] = db.count_feeds_today(day_start(now()))
-    body["ha_online"] = ha.is_online()
-    body["stream_online"] = streamwatch.is_online()
+    body["preview_mode"] = s.preview_mode
+    body["ha_online"] = True if s.preview_mode else ha.is_online()
+    body["stream_online"] = True if s.preview_mode else streamwatch.is_online()
     body["announcement"] = db.get_announcement()
     body["auto_feed_windows"] = db.get_auto_feed_windows()
     fasting = db.get_fasting()
@@ -141,23 +150,28 @@ async def feed(request: Request):
             )
 
 
-        try:
-            await ha.dispense(st["amount"])
-        except ha.HAError as exc:
-            return JSONResponse(
-                status_code=502,
-                content={"ok": False, "reason": "ha_error",
-                         "message": "餵食機而家連唔到，遲啲再試",
-                         "detail": str(exc)},
-            )
+        s = get_settings()
+        if not s.preview_mode:
+            try:
+                await ha.dispense(st["amount"])
+            except ha.HAError as exc:
+                return JSONResponse(
+                    status_code=502,
+                    content={"ok": False, "reason": "ha_error",
+                             "message": "餵食機而家連唔到，遲啲再試",
+                             "detail": str(exc)},
+                )
 
         fed_at = now()
         db.record_feed(fed_at, ip, st["amount"])
-        # mark this as a genuine web-visitor feed so the recorder can push a
-        # Telegram alert with IP + country once the clip is ready. Country is
-        # Cloudflare's own geolocation header (no external geo-IP lookup).
-        country = request.headers.get("cf-ipcountry")
-        db.set_visitor_feed_pending(ip, country, fed_at)
+        if s.preview_mode:
+            db.add_feed_event(fed_at, source="visitor", note="preview")
+        else:
+            # mark this as a genuine web-visitor feed so the recorder can push a
+            # Telegram alert with IP + country once the clip is ready. Country is
+            # Cloudflare's own geolocation header (no external geo-IP lookup).
+            country = request.headers.get("cf-ipcountry")
+            db.set_visitor_feed_pending(ip, country, fed_at)
 
     new_status = build_status(db.get_last_fed_at())
     return {"ok": True, "message": "餵咗喇！🐱", **new_status}
@@ -189,22 +203,26 @@ async def admin_feed(request: Request):
         # the scheduler and both calls could reach Home Assistant.
         async with autofeed.scheduler_lock():
             s = get_settings()
-            try:
-                await ha.dispense(s.feed_amount)
-            except ha.HAError as exc:
-                return JSONResponse(
-                    status_code=502,
-                    content={"ok": False, "reason": "ha_error",
-                             "message": "餵食機而家連唔到，遲啲再試",
-                             "detail": str(exc)},
-                )
+            if not s.preview_mode:
+                try:
+                    await ha.dispense(s.feed_amount)
+                except ha.HAError as exc:
+                    return JSONResponse(
+                        status_code=502,
+                        content={"ok": False, "reason": "ha_error",
+                                 "message": "餵食機而家連唔到，遲啲再試",
+                                 "detail": str(exc)},
+                    )
 
             fed_at = now()
             db.record_feed(fed_at, f"admin:{ip}", s.feed_amount, source="admin")
-            # The recorder sees the PetKit counter increase asynchronously.
-            # Leave it a short-lived marker so the corresponding feed_event
-            # is tagged as admin instead of the generic visitor fallback.
-            db.set_admin_feed_pending(fed_at)
+            if s.preview_mode:
+                db.add_feed_event(fed_at, source="admin", note="preview")
+            else:
+                # The recorder sees the PetKit counter increase asynchronously.
+                # Leave it a short-lived marker so the corresponding feed_event
+                # is tagged as admin instead of the generic visitor fallback.
+                db.set_admin_feed_pending(fed_at)
             # Force-feed bypasses the cooldown that was already running, but
             # the successful dispense becomes the new public cooldown anchor.
             # Mark any containing auto-feed window covered before releasing
@@ -241,15 +259,16 @@ async def admin_feed_test(request: Request):
 
     async with _feed_lock:
         s = get_settings()
-        try:
-            await ha.dispense(s.feed_amount)
-        except ha.HAError as exc:
-            return JSONResponse(
-                status_code=502,
-                content={"ok": False, "reason": "ha_error",
-                         "message": "餵食機而家連唔到，遲啲再試",
-                         "detail": str(exc)},
-            )
+        if not s.preview_mode:
+            try:
+                await ha.dispense(s.feed_amount)
+            except ha.HAError as exc:
+                return JSONResponse(
+                    status_code=502,
+                    content={"ok": False, "reason": "ha_error",
+                             "message": "餵食機而家連唔到，遲啲再試",
+                             "detail": str(exc)},
+                )
 
         fed_at = now()
         # source="admin_test" keeps this out of the public cooldown
@@ -259,6 +278,8 @@ async def admin_feed_test(request: Request):
         # "訪客餵食咗" count the same way, while staying distinguishable in
         # feed_log from a real forced feed via /admin/feed
         db.record_feed(fed_at, f"admin_test:{ip}", s.feed_amount, source="admin_test")
+        if s.preview_mode:
+            db.add_feed_event(fed_at, source="admin_test", note="preview")
 
     new_status = build_status(db.get_last_fed_at())
     return {"ok": True, "message": "模擬出糧完成，冇影響真實統計！🧪🐱", **new_status}
@@ -452,6 +473,13 @@ async def admin_history(request: Request):
         )
 
     today_start = day_start(now())
+    if get_settings().preview_mode:
+        return {
+            "ok": True,
+            "petkit_log": [
+                event["fed_at"] for event in db.get_feed_events(today_start)
+            ],
+        }
     hours = max(0.1, (now() - today_start).total_seconds() / 3600)
     try:
         petkit_log = await ha.get_feed_history(hours=hours)

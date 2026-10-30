@@ -177,14 +177,26 @@ async def _check_once_locked() -> None:
 
         # nobody fed within cooldown of this window and we're still within grace — feed now
         try:
-            # marker before dispensing so the recorder's poller (which creates
-            # the feed_event when times_dispensed bumps) can tag it as auto
-            db.set_auto_feed_pending(w, n)
-            await ha.dispense(s.feed_amount)
-            db.record_feed(now(), "auto:system", s.feed_amount, source="auto")
+            if s.preview_mode:
+                # Preview has no HA/recorder process. Simulate the complete
+                # result directly in its isolated DB so UI work remains useful
+                # without any possible path to the physical feeder.
+                fed_at = now()
+                db.record_feed(fed_at, "auto:preview", s.feed_amount, source="auto")
+                db.add_feed_event(fed_at, source="auto", note=w)
+            else:
+                # marker before dispensing so the recorder's poller (which creates
+                # the feed_event when times_dispensed bumps) can tag it as auto
+                db.set_auto_feed_pending(w, n)
+                await ha.dispense(s.feed_amount)
+                db.record_feed(now(), "auto:system", s.feed_amount, source="auto")
             handled[w] = today
             changed = True
-            logger.info("autofeed: dispensed for window %s (no feed in window)", w)
+            logger.info(
+                "autofeed: %s for window %s (no feed in window)",
+                "simulated preview feed" if s.preview_mode else "dispensed",
+                w,
+            )
         except ha.HAError as exc:
             # clear the stale marker and leave the window unhandled so it retries
             # on the next tick while still within grace
@@ -206,7 +218,8 @@ async def _loop() -> None:
 
 def start() -> None:
     global _task
-    if not get_settings().ha_token:
+    s = get_settings()
+    if not s.ha_token and not s.preview_mode:
         return
     _task = asyncio.create_task(_loop())
 

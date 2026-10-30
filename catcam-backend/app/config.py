@@ -38,6 +38,9 @@ class Settings(BaseSettings):
 
 
     db_path: str = "./catcam.db"
+    # Isolated development environment: never contact the real feeder,
+    # recorder, watchdog or Telegram. Mutations only touch the preview DB.
+    preview_mode: bool = False
 
     recordings_dir: str = "./recordings"
     recording_seconds: int = 60
