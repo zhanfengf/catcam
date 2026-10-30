@@ -976,6 +976,7 @@
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M5 12h14" />
                   </svg>
+                  <span class="auto-feed-remove-label">{t.autoFeedRemoveBtn}</span>
                 </button>
               </div>
             {/each}
@@ -1923,6 +1924,7 @@
     flex-direction: column;
     gap: 10px;
     margin-bottom: 10px;
+    overflow-x: hidden;
   }
   .auto-feed-row {
     display: grid;
@@ -1940,6 +1942,7 @@
     color: var(--text-dim);
   }
   .auto-feed-field input {
+    display: block;
     width: 100%;
     min-width: 0;
     max-width: 100%;
@@ -2003,6 +2006,9 @@
     stroke-width: 2;
     stroke-linecap: round;
   }
+  .auto-feed-remove-label {
+    display: none;
+  }
   .auto-feed-empty,
   .auto-feed-error {
     margin: 0 0 8px;
@@ -2019,17 +2025,24 @@
 
   @media (max-width: 520px) {
     .auto-feed-row {
-      grid-template-columns: minmax(0, 1fr) 44px;
-    }
-    .auto-feed-field:first-child {
-      grid-column: 1 / -1;
-    }
-    .auto-feed-field:nth-child(2) {
-      grid-column: 1;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .auto-feed-remove {
-      grid-column: 2;
-      grid-row: 2;
+      grid-column: 1 / -1;
+      width: 100%;
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-weight: 700;
+    }
+    .auto-feed-remove-label {
+      display: inline;
+    }
+    .auto-feed-field input[type='time'] {
+      -webkit-appearance: none;
+      appearance: none;
     }
   }
 
