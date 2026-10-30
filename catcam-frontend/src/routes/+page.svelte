@@ -1942,6 +1942,7 @@
   .auto-feed-field input {
     width: 100%;
     min-width: 0;
+    max-width: 100%;
     min-height: 44px;
     box-sizing: border-box;
     border: 1px solid var(--line);
@@ -2014,6 +2015,22 @@
   .auto-feed-error {
     color: var(--err);
     font-weight: 600;
+  }
+
+  @media (max-width: 520px) {
+    .auto-feed-row {
+      grid-template-columns: minmax(0, 1fr) 44px;
+    }
+    .auto-feed-field:first-child {
+      grid-column: 1 / -1;
+    }
+    .auto-feed-field:nth-child(2) {
+      grid-column: 1;
+    }
+    .auto-feed-remove {
+      grid-column: 2;
+      grid-row: 2;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
