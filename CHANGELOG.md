@@ -4,6 +4,13 @@
 
 純 Proxmox host/CT 層面嘅設定(例如 CT 114 嘅 `dev0` GPU passthrough、記憶體分配、`/etc/apt/sources.list.d/pve-enterprise.sources`)**唔屬於呢個 repo 嘅範圍**,呢類改動只會記喺 `my-homelab` skill 同每日工作日誌,呢度唔會列。`go2rtc.yaml`/`go2rtc.service` 本身由 `v0.8.0` 開始已經帶入 `catcam-backend/deploy/go2rtc/`,有埋正常 commit history。
 
+## v0.21.0 — 5 小時沒有餵食 Telegram 警報（2026-10-30）
+
+- `21c06e4` 新增 `feedwatch.py` 背景監察器，每 60 秒讀取最新 `feed_event`；如果真實時間連續 5 小時沒有任何餵食動態，便只在公開餵食時段內向主人發送 Telegram 警報。
+- 公開時間外的 CatCam 自動餵食、PetKit App／機身按鈕、PetKit 排程及 Admin 餵罐罐都會重設 5 小時計時；如果門檻在凌晨達到，延至下一次公開時間才提醒。同一筆最後餵食只提醒一次，有新事件後才重新計時。
+- Telegram 確認成功後才保存 `state.feed_inactivity_alert_key`；傳送失敗不會錯誤去重，下一輪會重試。監察器不出糧、不改 cooldown、`last_fed_at` 或自動餵食設定。
+- 新增測試後 Backend 共 `18/18` 通過；真實 Telegram 測試回覆 `HTTP 200`／`ok=true`，測試前後四張 table 完整內容 SHA-256 相同，確認沒有改動資料。此版本發布時尚未部署至 CT 114。
+
 ## v0.20.0 — 自動餵食 Telegram 通知（2026-10-30）
 
 - `5e44f35` CatCam 自動餵食安全網成功出糧及完成錄影後，會向主人發送 Telegram 通知，內容包括「自動餵食」、時間及可直接播放的錄影片段連結；由於並非訪客觸發，通知不會顯示 IP 或國家。
