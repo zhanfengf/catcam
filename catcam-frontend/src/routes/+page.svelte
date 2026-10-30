@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy, afterUpdate } from 'svelte';
   import '../app.css';
-  import { getStatus, feed, adminFeed, adminFeedTest, adminWetFood, adminSetAnnouncement, adminSetAutoFeed, adminSetFasting, adminClearFasting, adminHistory, getRecordings, getActivity } from '$lib/api.js';
+  import { getStatus, feed, adminFeed, adminFeedTest, adminWetFood, adminSetAnnouncement, adminSetCooldown, adminSetAutoFeed, adminSetFasting, adminClearFasting, adminHistory, getRecordings, getActivity } from '$lib/api.js';
   import { VideoRTC } from '$lib/video-rtc.js';
 
   const ADMIN_TOKEN_KEY = 'catcam_admin_token';
@@ -71,6 +71,16 @@
       announcementSaved: '公告已更新！📢',
       announcementSaveFail: '儲存失敗',
       announcementBtnLabel: '睇公告',
+      cooldownSectionTitle: '⏱️ 公開餵食間隔',
+      cooldownHint: '設定 120 至 240 分鐘；儲存後會立即重新計算現有倒數。',
+      cooldownHundredsLabel: '百位',
+      cooldownTensLabel: '十位',
+      cooldownOnesLabel: '個位',
+      cooldownMinutesUnit: '分鐘',
+      cooldownSaveBtn: '儲存 Cooldown',
+      cooldownSaving: '儲存緊…',
+      cooldownSaved: (min) => `Cooldown 已更新為 ${min} 分鐘！⏱️`,
+      cooldownSaveFail: 'Cooldown 儲存失敗',
       autoFeedSectionTitle: '🤖 自動餵食時段',
       autoFeedHint: '揀開始及結束時間；結束最遲 22:59，時段唔可以跨午夜。時段完結時如果冇人餵過，就自動餵一份。',
       autoFeedStartLabel: '開始',
@@ -103,7 +113,7 @@
       infoSubtitle: '2025年8月生・香港🇭🇰',
       infoBio: '哈囉～我係Roll Roll，2025年8月喺香港出世嘅捲耳貓BB 一隻，在2026年4月見到媽媽，收編了媽媽。最鍾意瞓覺、食嘢同俾人摸頭。你而家睇緊嘅就係我屋企，鏡頭直接對住我嘅食盆，等緊你嚟探我！',
       infoFeedTitle: '🍚 餵我',
-      infoFeedText: '撳「餵貓」掣就會自動餵我食一份乾糧。但係唔好餵太多啊：每 120 分鐘先可以餵一次，每日 07:00 - 23:59（香港時間）開放，夜晚我要瞓覺㗎～',
+      infoFeedText: (min) => `撳「餵貓」掣就會自動餵我食一份乾糧。但係唔好餵太多啊：每 ${min} 分鐘先可以餵一次，每日 07:00 - 23:59（香港時間）開放，夜晚我要瞓覺㗎～`,
       infoPhotosTitle: '📷 影過嘅相',
       infoHighlightTitle: '📺 今集精華',
       recordingsRowTitle: '餵食錄影',
@@ -174,6 +184,16 @@
       announcementSaved: 'Announcement updated! 📢',
       announcementSaveFail: 'Save failed',
       announcementBtnLabel: 'View announcement',
+      cooldownSectionTitle: '⏱️ Public feed interval',
+      cooldownHint: 'Set 120 to 240 minutes. Saving immediately recalculates the current countdown.',
+      cooldownHundredsLabel: 'Hundreds digit',
+      cooldownTensLabel: 'Tens digit',
+      cooldownOnesLabel: 'Ones digit',
+      cooldownMinutesUnit: 'minutes',
+      cooldownSaveBtn: 'Save Cooldown',
+      cooldownSaving: 'Saving…',
+      cooldownSaved: (min) => `Cooldown updated to ${min} minutes! ⏱️`,
+      cooldownSaveFail: 'Failed to save cooldown',
       autoFeedSectionTitle: '🤖 Auto-feed windows',
       autoFeedHint: 'Choose start and end times. End by 22:59; windows cannot cross midnight. If no one feeds, one portion is dispensed when the window ends.',
       autoFeedStartLabel: 'Start',
@@ -206,7 +226,7 @@
       infoSubtitle: 'Born Aug 2025 · Hong Kong 🇭🇰',
       infoBio: "Hi, I'm Roll Roll — a curly-eared kitten born in Hong Kong in August 2025. In April 2026 I met my mom and decided to adopt her. I love sleeping, eating, and getting head pats. What you're watching right now is my home — the camera points straight at my food bowl, so come visit me!",
       infoFeedTitle: '🍚 Feed Me',
-      infoFeedText: "Press the \"Feed Cat\" button and I'll get one portion of kibble. But don't overfeed me: only once every 120 minutes, open 07:00 - 23:59 (HK time) daily — I need my sleep at night~",
+      infoFeedText: (min) => `Press the "Feed Cat" button and I'll get one portion of kibble. But don't overfeed me: only once every ${min} minutes, open 07:00 - 23:59 (HK time) daily — I need my sleep at night~`,
       infoPhotosTitle: '📷 Photos',
       infoHighlightTitle: "📺 This Episode",
       recordingsRowTitle: 'Feeding Clips',
@@ -324,6 +344,8 @@
   let showAnnouncement = false;
   let announcementDraft = null;
   let savingAnnouncement = false;
+  let cooldownDraft = null;
+  let savingCooldown = false;
   let autoFeedDraft = null;
   let autoFeedError = '';
   let savingAutoFeed = false;
@@ -490,6 +512,7 @@
     showToast('ok', t.lockedToast);
     history = null;
     announcementDraft = null;
+    cooldownDraft = null;
     autoFeedDraft = null;
     autoFeedError = '';
   }
@@ -597,6 +620,34 @@
     announcementDraft = status.announcement ?? '';
   }
 
+  const DIGITS = Array.from({ length: 10 }, (_, i) => String(i));
+
+  function cooldownDigits(value) {
+    const bounded = Math.max(120, Math.min(240, Number(value) || 120));
+    const text = String(Math.trunc(bounded)).padStart(3, '0');
+    return { hundreds: text[0], tens: text[1], ones: text[2] };
+  }
+
+  function cooldownDraftValue() {
+    if (!cooldownDraft) return 120;
+    return Number(`${cooldownDraft.hundreds}${cooldownDraft.tens}${cooldownDraft.ones}`);
+  }
+
+  function normaliseCooldownDraft() {
+    cooldownDraft = cooldownDigits(cooldownDraftValue());
+  }
+
+  $: cooldownTensOptions = cooldownDraft?.hundreds === '2'
+    ? ['0', '1', '2', '3', '4']
+    : ['2', '3', '4', '5', '6', '7', '8', '9'];
+  $: cooldownOnesOptions = cooldownDraft?.hundreds === '2' && cooldownDraft?.tens === '4'
+    ? ['0']
+    : DIGITS;
+
+  $: if (adminToken && status && cooldownDraft === null) {
+    cooldownDraft = cooldownDigits(status.cooldown_minutes);
+  }
+
   function autoFeedRows(windows) {
     return (windows ?? []).map((window) => {
       const [start = '', end = ''] = window.split('-');
@@ -618,6 +669,25 @@
       showToast('ok', t.announcementSaved);
     } else {
       showToast('err', data.message || t.announcementSaveFail);
+      if (data.reason === 'unauthorized') {
+        lockAdmin();
+      }
+    }
+    await refresh();
+  }
+
+  async function onSaveCooldown() {
+    if (savingCooldown || !adminToken || !cooldownDraft) return;
+    normaliseCooldownDraft();
+    const value = cooldownDraftValue();
+    savingCooldown = true;
+    const { httpOk, data } = await adminSetCooldown(adminToken, value);
+    savingCooldown = false;
+    if (httpOk && data.ok) {
+      cooldownDraft = cooldownDigits(data.cooldown_minutes);
+      showToast('ok', t.cooldownSaved(data.cooldown_minutes));
+    } else {
+      showToast('err', data.message || t.cooldownSaveFail);
       if (data.reason === 'unauthorized') {
         lockAdmin();
       }
@@ -936,6 +1006,44 @@
 
       <div class="history">
         <div class="history-head">
+          <div class="history-title">{t.cooldownSectionTitle}</div>
+        </div>
+        <p class="history-note" id="cooldown-hint">{t.cooldownHint}</p>
+        {#if cooldownDraft}
+          <div class="cooldown-picker" aria-describedby="cooldown-hint">
+            <label class="cooldown-digit">
+              <span>{t.cooldownHundredsLabel}</span>
+              <select bind:value={cooldownDraft.hundreds} on:change={normaliseCooldownDraft}>
+                <option value="1">1</option>
+                <option value="2">2</option>
+              </select>
+            </label>
+            <label class="cooldown-digit">
+              <span>{t.cooldownTensLabel}</span>
+              <select bind:value={cooldownDraft.tens} on:change={normaliseCooldownDraft}>
+                {#each cooldownTensOptions as digit}
+                  <option value={digit}>{digit}</option>
+                {/each}
+              </select>
+            </label>
+            <label class="cooldown-digit">
+              <span>{t.cooldownOnesLabel}</span>
+              <select bind:value={cooldownDraft.ones} on:change={normaliseCooldownDraft}>
+                {#each cooldownOnesOptions as digit}
+                  <option value={digit}>{digit}</option>
+                {/each}
+              </select>
+            </label>
+            <span class="cooldown-unit">{t.cooldownMinutesUnit}</span>
+          </div>
+        {/if}
+        <button class="admin-btn" disabled={savingCooldown || !cooldownDraft} on:click={onSaveCooldown}>
+          {savingCooldown ? t.cooldownSaving : t.cooldownSaveBtn}
+        </button>
+      </div>
+
+      <div class="history">
+        <div class="history-head">
           <div class="history-title">{t.autoFeedSectionTitle}</div>
         </div>
         <p class="history-note" id="auto-feed-hint">{t.autoFeedHint}</p>
@@ -1111,7 +1219,7 @@
 
       <div class="info-feed-box">
         <div class="info-section-title">{t.infoFeedTitle}</div>
-        <p class="info-feed-text">{t.infoFeedText}</p>
+        <p class="info-feed-text">{t.infoFeedText(status?.cooldown_minutes ?? 120)}</p>
       </div>
 
       <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -1920,6 +2028,52 @@
     box-sizing: border-box;
   }
 
+  .cooldown-picker {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(58px, 78px)) auto;
+    align-items: end;
+    justify-content: center;
+    gap: 8px;
+    margin: 10px 0 12px;
+  }
+  .cooldown-digit {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-dim);
+  }
+  .cooldown-digit select {
+    width: 100%;
+    min-height: 52px;
+    box-sizing: border-box;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    padding: 6px 8px;
+    background: var(--bg, #ffffff);
+    color: var(--text);
+    font: inherit;
+    font-size: 22px;
+    font-weight: 700;
+    text-align: center;
+  }
+  .cooldown-digit select:focus-visible {
+    outline: 3px solid rgba(6, 201, 136, 0.28);
+    outline-offset: 2px;
+  }
+  .cooldown-unit {
+    align-self: end;
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-dim);
+  }
+
   .auto-feed-windows {
     display: flex;
     flex-direction: column;
@@ -2025,6 +2179,19 @@
   }
 
   @media (max-width: 520px) {
+    .cooldown-picker {
+      grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+      gap: 6px;
+    }
+    .cooldown-digit select {
+      min-height: 48px;
+      padding: 4px;
+      font-size: 20px;
+    }
+    .cooldown-unit {
+      min-height: 48px;
+      font-size: 12px;
+    }
     .auto-feed-row {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }

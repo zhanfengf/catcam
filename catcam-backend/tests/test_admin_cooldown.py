@@ -1,7 +1,7 @@
 import json
 import tempfile
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from starlette.requests import Request
 
-from app import autofeed, db, main, recorder
+from app import autofeed, db, main, recorder, scheduling
 
 
 HK = ZoneInfo("Asia/Hong_Kong")
@@ -37,6 +37,92 @@ class AdminCooldownDbTests(unittest.IsolatedAsyncioTestCase):
 
         db.record_feed(simulated, "admin_test:owner", 10, source="admin_test")
         self.assertEqual(db.get_last_fed_at(), forced)
+
+    def test_dynamic_cooldown_falls_back_then_persists(self):
+        self.assertEqual(db.get_cooldown_minutes(120), 120)
+
+        db.set_cooldown_minutes(180)
+
+        self.assertEqual(db.get_cooldown_minutes(120), 180)
+        with self.assertRaises(ValueError):
+            db.set_cooldown_minutes(119)
+        with self.assertRaises(ValueError):
+            db.set_cooldown_minutes(241)
+        with self.assertRaises(ValueError):
+            db.set_cooldown_minutes(True)
+
+    def test_external_petkit_feed_resets_cooldown_without_feed_log(self):
+        detected = datetime(2026, 10, 30, 5, 45, tzinfo=HK)
+        before = db.count_feeds_today(detected.replace(hour=0, minute=0))
+
+        source, note, visitor = recorder._record_detected_feed(detected)
+
+        self.assertEqual((source, note, visitor), ("petkit", None, None))
+        self.assertEqual(db.get_last_fed_at(), detected)
+        self.assertEqual(
+            db.count_feeds_today(detected.replace(hour=0, minute=0)),
+            before,
+        )
+        self.assertEqual(db.get_latest_feed_event()["source"], "petkit")
+
+    def test_admin_test_marker_preserves_cooldown_exception(self):
+        previous = datetime(2026, 10, 30, 5, 0, tzinfo=HK)
+        detected = previous + timedelta(minutes=10)
+        db.record_feed(previous, "visitor", 10)
+        db.set_admin_test_pending(detected - timedelta(seconds=2))
+
+        source, note, visitor = recorder._record_detected_feed(detected)
+
+        self.assertEqual((source, note, visitor), ("admin_test", None, None))
+        self.assertEqual(db.get_last_fed_at(), previous)
+        self.assertEqual(db.get_latest_feed_event()["source"], "admin_test")
+        self.assertFalse(db.pop_admin_test_pending(detected, 90))
+
+    def test_existing_countdown_recalculates_immediately(self):
+        last = datetime(2026, 10, 30, 10, 0, tzinfo=HK)
+        checked_at = datetime(2026, 10, 30, 11, 0, tzinfo=HK)
+        settings = SimpleNamespace(
+            cooldown_minutes=120,
+            feed_amount=10,
+            open_time="07:00",
+            close_time="23:59",
+            timezone="Asia/Hong_Kong",
+            open_t=time(7, 0),
+            close_t=time(23, 59),
+        )
+        db.set_cooldown_minutes(180)
+
+        with (
+            patch.object(scheduling, "get_settings", return_value=settings),
+            patch.object(scheduling, "now", return_value=checked_at),
+        ):
+            result = scheduling.build_status(last)
+
+        self.assertEqual(result["cooldown_minutes"], 180)
+        self.assertEqual(result["next_feed_at"], "2026-10-30T13:00:00+08:00")
+        self.assertEqual(result["seconds_until_next"], 7200)
+
+    def test_cooldown_crossing_close_moves_to_next_open(self):
+        last = datetime(2026, 10, 30, 21, 28, tzinfo=HK)
+        checked_at = last
+        settings = SimpleNamespace(
+            cooldown_minutes=120,
+            feed_amount=10,
+            open_time="07:00",
+            close_time="23:59",
+            timezone="Asia/Hong_Kong",
+            open_t=time(7, 0),
+            close_t=time(23, 59),
+        )
+        db.set_cooldown_minutes(180)
+
+        with (
+            patch.object(scheduling, "get_settings", return_value=settings),
+            patch.object(scheduling, "now", return_value=checked_at),
+        ):
+            result = scheduling.build_status(last)
+
+        self.assertEqual(result["next_feed_at"], "2026-10-31T07:00:00+08:00")
 
     def test_force_feed_inside_long_window_marks_it_handled(self):
         db.set_auto_feed_windows(["05:00-08:00", "09:00-09:30"])
@@ -119,6 +205,32 @@ class AdminCooldownDbTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(db.get_last_fed_at(), checked_at)
         self.assertEqual(db.get_latest_feed_event()["source"], "auto")
         self.assertEqual(db.get_latest_feed_event()["note"], "07:00-07:30")
+
+    async def test_auto_feed_uses_dynamic_cooldown_exact_boundary(self):
+        db.set_auto_feed_windows(["08:30-09:00"])
+        db.set_cooldown_minutes(180)
+        db.record_feed(
+            datetime(2026, 10, 30, 6, 0, tzinfo=HK),
+            "visitor",
+            10,
+        )
+        checked_at = datetime(2026, 10, 30, 9, 0, tzinfo=HK)
+        settings = SimpleNamespace(
+            preview_mode=True,
+            cooldown_minutes=120,
+            feed_amount=10,
+        )
+
+        with (
+            patch.object(autofeed, "get_settings", return_value=settings),
+            patch.object(autofeed, "now", return_value=checked_at),
+            patch.object(autofeed.ha, "dispense", new_callable=AsyncMock) as dispense,
+        ):
+            await autofeed._check_once_locked()
+
+        dispense.assert_not_awaited()
+        self.assertEqual(db.get_last_fed_at(), checked_at)
+        self.assertEqual(db.get_latest_feed_event()["source"], "auto")
 
     def test_force_feed_pending_marker_is_consumed_once(self):
         forced = datetime(2026, 10, 29, 18, 37, tzinfo=HK)
@@ -214,6 +326,88 @@ class AdminEndpointTests(unittest.IsolatedAsyncioTestCase):
         )
         replace_windows.assert_not_called()
 
+    async def test_cooldown_api_accepts_integer_boundaries(self):
+        for value in (120, 180, 240):
+            with self.subTest(value=value):
+                request = self._json_request(
+                    "/admin/cooldown",
+                    {"cooldown_minutes": value},
+                )
+                status = {
+                    "can_feed": False,
+                    "reason": "cooldown",
+                    "cooldown_minutes": value,
+                    "seconds_until_next": value * 60,
+                }
+                with (
+                    patch.object(main, "check_ip", return_value=True),
+                    patch.object(main, "verify_admin_signature", return_value=True),
+                    patch.object(main.db, "set_cooldown_minutes") as save,
+                    patch.object(main.db, "get_last_fed_at", return_value=None),
+                    patch.object(main, "build_status", return_value=status),
+                ):
+                    result = await main.admin_set_cooldown(request)
+
+                save.assert_called_once_with(value)
+                self.assertTrue(result["ok"])
+                self.assertEqual(result["cooldown_minutes"], value)
+
+    async def test_cooldown_api_rejects_invalid_values(self):
+        for value in (None, True, 119, 241, 180.5, "180"):
+            with self.subTest(value=value):
+                request = self._json_request(
+                    "/admin/cooldown",
+                    {"cooldown_minutes": value},
+                )
+                with (
+                    patch.object(main, "check_ip", return_value=True),
+                    patch.object(main, "verify_admin_signature", return_value=True),
+                    patch.object(main.db, "set_cooldown_minutes") as save,
+                ):
+                    result = await main.admin_set_cooldown(request)
+
+                self.assertEqual(result.status_code, 422)
+                self.assertEqual(
+                    json.loads(result.body)["reason"],
+                    "invalid_cooldown_minutes",
+                )
+                save.assert_not_called()
+
+    async def test_failed_admin_test_clears_pending_marker(self):
+        request = Request({
+            "type": "http",
+            "method": "POST",
+            "path": "/admin/feed-test",
+            "headers": [],
+            "client": ("203.0.113.4", 12345),
+        })
+        pending_at = datetime(2026, 10, 30, 12, 0, tzinfo=HK)
+        settings = SimpleNamespace(
+            preview_mode=False,
+            feed_amount=10,
+            client_ip_header="cf-connecting-ip",
+        )
+
+        with (
+            patch.object(main, "check_ip", return_value=True),
+            patch.object(main, "verify_admin_signature", return_value=True),
+            patch.object(main, "get_settings", return_value=settings),
+            patch.object(main, "now", return_value=pending_at),
+            patch.object(main.db, "set_admin_test_pending") as set_pending,
+            patch.object(main.db, "clear_admin_test_pending") as clear_pending,
+            patch.object(
+                main.ha,
+                "dispense",
+                new_callable=AsyncMock,
+                side_effect=main.ha.HAError("offline"),
+            ),
+        ):
+            result = await main.admin_feed_test(request)
+
+        self.assertEqual(result.status_code, 502)
+        set_pending.assert_called_once_with(pending_at)
+        clear_pending.assert_called_once_with()
+
     async def test_auto_feed_api_returns_past_new_windows_as_tomorrow(self):
         saved_at = datetime(2026, 10, 30, 12, 10, tzinfo=HK)
         request = self._json_request(
@@ -287,7 +481,12 @@ class AdminEndpointTests(unittest.IsolatedAsyncioTestCase):
             "headers": [],
             "client": ("203.0.113.4", 12345),
         })
-        status = {"can_feed": False, "reason": "cooldown", "seconds_until_next": 7200}
+        status = {
+            "can_feed": False,
+            "reason": "cooldown",
+            "seconds_until_next": 7200,
+            "cooldown_minutes": 120,
+        }
 
         with (
             patch.object(main, "check_ip", return_value=True),

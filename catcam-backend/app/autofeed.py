@@ -4,7 +4,7 @@ from datetime import datetime, time, timedelta
 
 from . import db, ha
 from .config import get_settings
-from .scheduling import now
+from .scheduling import current_cooldown_minutes, now
 
 logger = logging.getLogger(__name__)
 
@@ -160,9 +160,9 @@ async def _check_once_locked() -> None:
             changed = True
             continue
 
-        s = get_settings()
         last_fed = db.get_last_fed_at()
-        if last_fed and end_dt - last_fed < timedelta(minutes=s.cooldown_minutes):
+        cooldown = current_cooldown_minutes()
+        if last_fed and end_dt - last_fed < timedelta(minutes=cooldown):
             # a feed (any source, any window) already landed within the
             # global cooldown of this window's close — treat it as already
             # covered rather than re-checking the window's own fixed range.
@@ -177,6 +177,7 @@ async def _check_once_locked() -> None:
 
         # nobody fed within cooldown of this window and we're still within grace — feed now
         try:
+            s = get_settings()
             if s.preview_mode:
                 # Preview has no HA/recorder process. Simulate the complete
                 # result directly in its isolated DB so UI work remains useful

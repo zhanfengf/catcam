@@ -17,7 +17,7 @@
 - 出糧：call Home Assistant REST API → text.zhi_ma_guan_jia_manual_feed
 
 ## 規則（已實作喺 app/scheduling.py）
-- 全站共用 120 分鐘冷卻
+- 全站共用 cooldown；Admin 可在秘密通道設定 120–240 分鐘，預設 120
 - 開放時段 07:00–23:59 Asia/Hong_Kong
 - 固定出糧份量 10
 - 每 IP 防洗版

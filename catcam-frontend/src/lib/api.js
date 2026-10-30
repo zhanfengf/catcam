@@ -120,6 +120,26 @@ export async function adminSetAnnouncement(token, text) {
   return { httpOk: r.ok, status: r.status, data };
 }
 
+export async function adminSetCooldown(token, cooldownMinutes) {
+  const { timestamp, signature } = await signAdminRequest(token, 'POST', '/admin/cooldown');
+  const r = await fetch(`${API_BASE}/admin/cooldown`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Admin-Timestamp': timestamp,
+      'X-Admin-Signature': signature
+    },
+    body: JSON.stringify({ cooldown_minutes: cooldownMinutes })
+  });
+  let data = {};
+  try {
+    data = await r.json();
+  } catch (e) {
+
+  }
+  return { httpOk: r.ok, status: r.status, data };
+}
+
 export async function adminSetAutoFeed(token, windows) {
   const { timestamp, signature } = await signAdminRequest(token, 'POST', '/admin/auto-feed');
   const r = await fetch(`${API_BASE}/admin/auto-feed`, {

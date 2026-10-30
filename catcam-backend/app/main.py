@@ -234,7 +234,10 @@ async def admin_feed(request: Request):
     new_status = build_status(db.get_last_fed_at())
     return {
         "ok": True,
-        "message": f"強制餵咗喇！公開餵食 {s.cooldown_minutes} 分鐘後再開 🔓🐱",
+        "message": (
+            "強制餵咗喇！公開餵食 "
+            f"{new_status['cooldown_minutes']} 分鐘後再開 🔓🐱"
+        ),
         **new_status,
     }
 
@@ -262,9 +265,12 @@ async def admin_feed_test(request: Request):
     async with _feed_lock:
         s = get_settings()
         if not s.preview_mode:
+            pending_at = now()
+            db.set_admin_test_pending(pending_at)
             try:
                 await ha.dispense(s.feed_amount)
             except ha.HAError as exc:
+                db.clear_admin_test_pending()
                 return JSONResponse(
                     status_code=502,
                     content={"ok": False, "reason": "ha_error",
@@ -285,6 +291,60 @@ async def admin_feed_test(request: Request):
 
     new_status = build_status(db.get_last_fed_at())
     return {"ok": True, "message": "模擬出糧完成，冇影響真實統計！🧪🐱", **new_status}
+
+
+@app.post("/admin/cooldown")
+async def admin_set_cooldown(request: Request):
+    ip = client_ip(request)
+
+    if not check_ip(ip):
+        return JSONResponse(
+            status_code=429,
+            content={"ok": False, "reason": "too_many_requests",
+                     "message": "撳得太密啦，唞一唞先"},
+        )
+
+    timestamp = request.headers.get("x-admin-timestamp", "")
+    signature = request.headers.get("x-admin-signature", "")
+    if not verify_admin_signature("POST", "/admin/cooldown", timestamp, signature):
+        return JSONResponse(
+            status_code=403,
+            content={"ok": False, "reason": "unauthorized",
+                     "message": "密碼唔啱或者已過期"},
+        )
+
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    value = body.get("cooldown_minutes")
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or not db.COOLDOWN_MINUTES_MIN <= value <= db.COOLDOWN_MINUTES_MAX
+    ):
+        return JSONResponse(
+            status_code=422,
+            content={
+                "ok": False,
+                "reason": "invalid_cooldown_minutes",
+                "message": "Cooldown 必須係 120 至 240 之間嘅整數分鐘",
+            },
+        )
+
+    # Match the force-feed lock order: public feed first, scheduler second.
+    # The save therefore cannot race either a visitor dispense or an auto-feed
+    # boundary check and leave one request half on the old value.
+    async with _feed_lock:
+        async with autofeed.scheduler_lock():
+            db.set_cooldown_minutes(value)
+            new_status = build_status(db.get_last_fed_at())
+
+    return {
+        "ok": True,
+        "message": f"Cooldown 已更新為 {value} 分鐘",
+        **new_status,
+    }
 
 
 @app.post("/admin/wet-food")

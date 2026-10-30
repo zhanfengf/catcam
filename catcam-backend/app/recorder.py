@@ -234,8 +234,24 @@ def _resolve_feed_source(when: datetime) -> tuple[str, str | None, dict | None]:
         return "auto", auto_window, None
     if db.pop_admin_feed_pending(when, 90):
         return "admin", None, None
+    if db.pop_admin_test_pending(when, 90):
+        return "admin_test", None, None
     visitor = db.pop_visitor_feed_pending(when, 90)
-    return "visitor", None, visitor
+    if visitor:
+        return "visitor", None, visitor
+    return "petkit", None, None
+
+
+def _record_detected_feed(when: datetime) -> tuple[str, str | None, dict | None]:
+    """Persist one counter-detected dispense and return its trigger metadata."""
+    source, note, visitor = _resolve_feed_source(when)
+    if source == "petkit":
+        # App, physical-button and PetKit schedule dispenses are real meals.
+        # They do not belong in website feed_log, but they do restart the
+        # public cooldown from detection time.
+        db.set_last_fed_at(when)
+    db.add_feed_event(when, source=source, note=note)
+    return source, note, visitor
 
 
 async def _poll_loop() -> None:
@@ -254,12 +270,7 @@ async def _poll_loop() -> None:
                 # site can show it ~1 min before the clip finishes rendering.
                 # if the scheduler just dispensed (marker set <90s ago), tag
                 # this event as that auto-feed so the feed shows the 🤖 line
-                source, note, visitor = _resolve_feed_source(when)
-                db.add_feed_event(
-                    when,
-                    source=source,
-                    note=note,
-                )
+                source, note, visitor = _record_detected_feed(when)
                 asyncio.create_task(_record_clip(when, visitor, source))
             last_val = val
 

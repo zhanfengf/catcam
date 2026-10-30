@@ -1,6 +1,7 @@
 from datetime import time
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,7 +20,7 @@ class Settings(BaseSettings):
 
 
     feed_amount: int = 10
-    cooldown_minutes: int = 120
+    cooldown_minutes: int = Field(default=120, ge=120, le=240)
     open_time: str = "07:00"
     close_time: str = "23:59"
     timezone: str = "Asia/Hong_Kong"

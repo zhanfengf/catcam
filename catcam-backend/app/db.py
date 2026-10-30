@@ -7,6 +7,9 @@ from datetime import datetime
 _lock = threading.Lock()
 _conn: sqlite3.Connection | None = None
 
+COOLDOWN_MINUTES_MIN = 120
+COOLDOWN_MINUTES_MAX = 240
+
 
 def init_db(db_path: str) -> None:
     global _conn
@@ -68,6 +71,38 @@ def get_last_fed_at() -> datetime | None:
     if not row or not row[0]:
         return None
     return datetime.fromisoformat(row[0])
+
+
+def set_last_fed_at(fed_at: datetime) -> None:
+    """Advance the shared cooldown without creating a website feed_log row.
+
+    PetKit App, physical-button and PetKit schedule dispenses are detected by
+    the device counter rather than a CatCam endpoint. They are real meals, so
+    they reset the public cooldown, but remain outside feed_log by design.
+    """
+    _set_state("last_fed_at", fed_at.isoformat())
+
+
+def get_cooldown_minutes(default: int) -> int:
+    """Return the persisted Admin value, falling back to server config."""
+    raw = _get_state("cooldown_minutes", "")
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return default
+    if not COOLDOWN_MINUTES_MIN <= value <= COOLDOWN_MINUTES_MAX:
+        return default
+    return value
+
+
+def set_cooldown_minutes(value: int) -> None:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or not COOLDOWN_MINUTES_MIN <= value <= COOLDOWN_MINUTES_MAX
+    ):
+        raise ValueError("cooldown_minutes must be an integer from 120 to 240")
+    _set_state("cooldown_minutes", str(value))
 
 
 def record_feed(
@@ -301,6 +336,30 @@ def pop_admin_feed_pending(now: datetime, within_seconds: int) -> bool:
         return False
     _set_state("admin_feed_pending", "")
     return (now - at).total_seconds() <= within_seconds
+
+
+def set_admin_test_pending(at: datetime) -> None:
+    """Mark a simulated dispense so recorder does not reset cooldown."""
+    _set_state("admin_test_pending", at.isoformat())
+
+
+def clear_admin_test_pending() -> None:
+    _set_state("admin_test_pending", "")
+
+
+def pop_admin_test_pending(now: datetime, within_seconds: int) -> bool:
+    """Consume one fresh simulated-dispense marker and clear stale values."""
+    raw = _get_state("admin_test_pending", "")
+    if not raw:
+        return False
+    try:
+        at = datetime.fromisoformat(raw)
+    except ValueError:
+        clear_admin_test_pending()
+        return False
+    clear_admin_test_pending()
+    age = (now - at).total_seconds()
+    return 0 <= age <= within_seconds
 
 
 def set_visitor_feed_pending(ip: str | None, country: str | None, at: datetime) -> None:

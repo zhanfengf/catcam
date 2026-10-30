@@ -11,13 +11,14 @@
 ## 內置規則
 
 - 憑連結使用，毋須登入。
-- 全站共用 cooldown：兩次餵食相隔 **120 分鐘**。
+- 全站共用 cooldown：Admin 可設定 **120–240 分鐘**，預設 **120 分鐘**。
 - 開放時間：香港時間 **07:00–23:59**。
 - 固定份量：**10**。
 - 每個 IP 防洗版；這只阻止重複轟炸 endpoint，不是餵食配額。
-- `last_fed_at` 保存在 **SQLite**，重啟後仍會保留限制。公開 `/feed`、主人強制
-  餵食 `/admin/feed` 及排程自動餵食都會更新這個時間。`/admin/feed` 可繞過
-  進行中的 cooldown，但成功出糧後會重新開始 120 分鐘 cooldown；只有
+- `last_fed_at` 與 Admin 選擇的 `cooldown_minutes` 保存在 **SQLite state**，重啟後
+  仍會保留限制。公開 `/feed`、主人強制餵食 `/admin/feed`、排程自動餵食及 PetKit
+  外部出糧都會更新最後餵食時間。`/admin/feed` 可繞過進行中的 cooldown，但成功
+  出糧後會重新開始目前 cooldown；只有
   `/admin/feed-test` 不會改動倒數。
 - `fed_today`（顯示為「訪客餵食咗」／`Fed by visitors`）**只計公開訪客餵食**；
   所有 Admin 通道餵食均刻意排除。
@@ -44,6 +45,7 @@ DB 建立模擬 `feed_log`／`feed_event`，永遠不呼叫 `ha.dispense()`。`/
 | POST | `/admin/feed-test` | HMAC 簽署的模擬餵食。真正出糧以測試完整 pipeline，但不影響公開 cooldown 或「訪客餵食咗」次數。 |
 | POST | `/admin/wet-food` | HMAC 簽署的餵罐罐紀錄。重新開始公開 cooldown，但不呼叫 HA、不出乾糧、不錄影。 |
 | POST | `/admin/announcement` | HMAC 簽署。設定公告文字；傳入 `""` 可清除公告。 |
+| POST | `/admin/cooldown` | HMAC 簽署。保存 120–240 的整數分鐘並立即重新計算現有倒數。 |
 | POST | `/admin/auto-feed` | HMAC 簽署。設定同日、結束最遲 `22:59` 的 `HH:MM-HH:MM` 自動餵食安全網時段清單。 |
 | POST | `/admin/fasting` | HMAC 簽署。開啟禁食模式及暫停自動餵食安全網。 |
 | POST | `/admin/fasting/clear` | HMAC 簽署。解除禁食模式。 |
@@ -56,7 +58,7 @@ DB 建立模擬 `feed_log`／`feed_event`，永遠不呼叫 `ha.dispense()`。`/
 `429`；HA 無法連線則回傳 `502`。
 
 `POST /admin/feed`、`/admin/feed-test`、`/admin/wet-food`、
-`/admin/announcement`、`/admin/auto-feed`、`/admin/fasting`、
+`/admin/announcement`、`/admin/cooldown`、`/admin/auto-feed`、`/admin/fasting`、
 `/admin/fasting/clear` 及 `GET /admin/history` 都是秘密通道解鎖後使用的
 endpoints。用戶需要連按 logo 5 次並輸入 `ADMIN_TOKEN`。每個請求都必須以
 `ADMIN_TOKEN` 對 `{METHOD}:{PATH}:{timestamp}` 產生 HMAC-SHA256 簽署，timestamp
@@ -77,6 +79,18 @@ endpoints。用戶需要連按 logo 5 次並輸入 `ADMIN_TOKEN`。每個請求�
 - 沒有前綴：訪客真正呼叫 `/feed`。
 
 `count_feeds_today()`（「訪客餵食咗」統計）會排除所有 Admin 前綴。
+
+### 動態 cooldown
+
+`state.cooldown_minutes` 保存秘密通道目前選擇的整數分鐘；有效範圍是 120–240。
+DB 未有這個 key 時，才 fallback 到 `.env` 的 `COOLDOWN_MINUTES`。`next_feed_at`
+不會寫入 DB，而是每次由 `last_fed_at + cooldown_minutes` 再配合公開時段即時計算。
+因此 Admin 修改後現有倒數立即延長或縮短，其他訪客最遲在下一次 15 秒 `/status`
+poll 看見新值。
+
+`/admin/cooldown` 與公開 feed lock、自動餵食 scheduler lock 共用固定鎖順序，避免
+儲存設定同一刻剛好有人餵食或自動時段結束時混用新舊值。Frontend 的百位／十位／
+個位選擇器只負責 UX；Backend 仍會拒絕 `119`、`241`、boolean、小數及文字。
 
 `/admin/history` 完全不讀取本網站的 `feed_log`。它會查詢 Home Assistant
 history API 內 PetKit 裝置的 `times_dispensed` counter。無論出糧由網站、
@@ -101,6 +115,13 @@ PetKit App、機身按鈕或自動排程觸發，每次真實出糧都會令 cou
 counter，因此任何真實出糧都會觸發，包括訪客按網站按鈕、主人 Admin 強制餵食、
 PetKit App、餵食機機身按鈕及 PetKit 自己的排程。如果 `/feed` 在 HA 真正出糧前
 已失敗（例如回傳 `502`），counter 不會改變，亦不會錄影。
+
+沒有 CatCam pending marker 的 counter 增加會標記為 `source="petkit"`，代表無法
+再細分的 PetKit App／機身按鈕／PetKit 排程，並以偵測時間更新 `last_fed_at`，但不會
+新增 `feed_log`。counter 每 10 秒檢查一次，所以這類 cooldown anchor 最多比實際
+出糧遲約 10 秒。`/admin/feed-test` 會先建立一次性 `admin_test_pending` marker；
+recorder 消耗後仍建立餵食動態及影片，但刻意不更新 cooldown。HA 出糧失敗時 marker
+會立即清除，避免誤標下一次真正的 PetKit 外部出糧。
 
 影片保存在 `recordings_dir`（預設 `./recordings`），以 7 日滾動方式保留；每次
 新增影片時會刪除最舊檔案。影片毋須驗證即可公開存取：`GET /recordings` 提供 JSON
@@ -396,7 +417,7 @@ PetKit，而是同步新增自己的 `feed_event.source="admin_wet_food"` row。
 `22:59` 加上 60 分鐘寬限期最遲為同日 `23:59`，因此不會把補餵判斷帶到翌日。
 
 主人在設定時段內強制餵食或餵罐罐，會立即把該時段標記為已處理，即使時段長過
-120 分鐘亦一樣。主人操作與 scheduler 共用同一把 lock，因此在時段邊界按掣，
+目前 cooldown 亦一樣。主人操作與 scheduler 共用同一把 lock，因此在時段邊界按掣，
 不會與 scheduler race 而重複出糧。
 
 每個時段在今日結束、且尚未處理時：
@@ -409,9 +430,9 @@ PetKit，而是同步新增自己的 `feed_event.source="admin_wet_food"` row。
   時段後，數小時才突然補餵；超過寬限期只會標記完成，不會出糧。
 
 `auto_feed_handled` 是保存在 `state` 的 `{window: "YYYY-MM-DD"}` map，確保重啟
-不會再次觸發今日已處理時段。自動餵食**會**推進公開 cooldown：除 `admin_test`
-外，所有來源的 `record_feed` 都會更新 `last_fed_at`，與「下次可以餵：120 分鐘後」
-訊息一致。它在 `feed_log` 以 `auto:` 標記，因此不計入「訪客餵食咗」。
+不會再次觸發今日已處理時段。自動餵食**會**推進目前公開 cooldown；它在
+`feed_log` 以 `auto:` 標記，因此不計入「訪客餵食咗」。PetKit 外部出糧則只更新
+`last_fed_at` 與 `feed_event`，不會混入網站 `feed_log`。
 
 `replace_windows()` 在 Admin 儲存時只保留仍存在於新 `auto_feed_windows` 清單的
 handled keys，已取消時段的舊 key 會移除；同一時段目前的處理日期則保留，避免普通
@@ -489,4 +510,5 @@ curl -X POST localhost:8080/feed -H 'cf-connecting-ip: 1.2.3.4'
 
 - 只使用**單一 worker**，現有 systemd unit 已按此設定。防洗版 limiter 及 feed lock
   都只存在記憶體。
-- 如要修改每份份量、cooldown 或開放時間，只需編輯 `.env` 並重啟，毋須修改程式碼。
+- 如要修改每份份量或開放時間，只需編輯 `.env` 並重啟。Cooldown 日常由秘密通道
+  設定；`.env` 的 `COOLDOWN_MINUTES` 只在 DB 尚未保存 Admin 值時作 fallback。

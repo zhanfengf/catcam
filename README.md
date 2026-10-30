@@ -45,20 +45,22 @@ go2rtc (WebSocket + MSE)  ──►  Home Assistant WHEP  ──►  📷 PetKit
 ## 餵食規則
 
 - **憑連結使用**：毋須登入。
-- **共用 cooldown**：所有訪客共用 120 分鐘餵食間隔。
+- **共用 cooldown**：Admin 可在秘密通道設定 120–240 分鐘；所有訪客共用同一值。
 - **開放時間**：香港時間 07:00–23:59。
 - **固定份量**：每次出一份標準份量。
 - **每個 IP 防洗版**：阻止單一用戶短時間內重複呼叫 endpoint，與餵食配額分開計算。
-- 狀態（`last_fed_at`）會保存至 **SQLite**，重啟服務後仍會保留限制。
+- `last_fed_at` 與 Admin 選擇的 `cooldown_minutes` 會保存至 **SQLite**，重啟服務後
+  仍會保留限制。
 
 ### API 對照與 `/feed` 後端防線
 
 | 功能 | API | 主要規則 |
 | --- | --- | --- |
-| 訪客餵食 | `POST /feed` | 受開放時間及 120 分鐘 cooldown 限制 |
-| Admin 強制餵食 | `POST /admin/feed` | 繞過限制；成功後重設 120 分鐘 |
+| 訪客餵食 | `POST /feed` | 受開放時間及目前 cooldown 限制 |
+| Admin 強制餵食 | `POST /admin/feed` | 繞過限制；成功後重設目前 cooldown |
 | Admin 模擬出糧 | `POST /admin/feed-test` | 繞過限制；不改 cooldown |
-| Admin 餵罐罐 | `POST /admin/wet-food` | 繞過限制；重設 120 分鐘，但不出糧、不錄影 |
+| Admin 餵罐罐 | `POST /admin/wet-food` | 繞過限制；重設目前 cooldown，但不出糧、不錄影 |
+| 設定 Cooldown | `POST /admin/cooldown` | Admin 簽署；設定 120–240 分鐘並立即重新計算倒數 |
 | 設定公告 | `POST /admin/announcement` | Admin 簽署 |
 | 開啟禁食 | `POST /admin/fasting` | Admin 簽署 |
 | 解除禁食 | `POST /admin/fasting/clear` | Admin 簽署 |
@@ -88,8 +90,9 @@ HTTP 403            HTTP 429
 兩項都通過才呼叫 Home Assistant 出糧
 ```
 
-Admin 在公開餵食時間外記錄餵罐罐後，系統會同時考慮「120 分鐘 cooldown
-結束」及「公開餵食時段開放」；公開按鈕以兩者中較遲的時間作為倒數終點：
+Admin 在公開餵食時間外記錄餵罐罐後，系統會同時考慮「目前 cooldown 結束」及
+「公開餵食時段開放」；公開按鈕以兩者中較遲的時間作為倒數終點。以下以 120 分鐘
+設定為例：
 
 | 餵罐罐時間 | 120 分鐘後 | 公開餵食最早時間 | 按鈕大約顯示 |
 | --- | --- | --- | --- |
@@ -154,17 +157,23 @@ Admin 記錄餵罐罐後，動態會立即顯示「🥫🐟 啱啱餵咗 Roll Ro
 | 餵食機機身按鈕 | ❌ | ✅ |
 | PetKit 自己的排程 | ❌ | ✅ |
 
+PetKit App、機身按鈕及 PetKit 排程由裝置 counter 偵測，仍然不會新增 `feed_log`，
+但會更新 `last_fed_at`、重設目前公開 cooldown，並透過 `feed_event` 重設 5 小時提醒。
+Admin 模擬出糧會用一次性 marker 保持唯一例外：照常出糧、錄影及新增動態，但不改
+公開 cooldown。
+
 <img src="docs/screenshots/feeding-activity.png" width="300" alt="餵食動態：每次出糧先顯示餵咗，再顯示附重播連結的錄影好咗">
 
 連按標誌 5 次並輸入密碼，即可開啟隱藏 Admin 通道。管理功能包括：繞過當刻
 限制、但成功後重新開始公開 cooldown 的強制餵食；不影響公開 cooldown 或統計的
-模擬訪客測試；只記錄主人親手餵罐頭、不出乾糧的餵罐罐按鈕；公告欄；自動餵食
+模擬訪客測試；只記錄主人親手餵罐頭、不出乾糧的餵罐罐按鈕；120–240 分鐘三位數
+cooldown 選擇器；公告欄；自動餵食
 安全網時段（時段內無人餵食便在結束時補一份）；以及今日 PetKit 出糧紀錄：
 
 <img src="docs/screenshots/admin-panel.png" width="260" alt="Admin 面板：強制餵食、模擬測試、公告、自動餵食時段及今日 PetKit 出糧紀錄">
 
 在自動餵食安全網時段內強制餵食，會立即把整個時段標記為已處理，避免時段結束時
-再次出糧。即使該時段長過 120 分鐘 cooldown，這項保護仍然有效。
+再次出糧。即使該時段長過目前 cooldown，這項保護仍然有效。
 
 Admin 面板以手機原生時間選擇器設定每段開始及結束時間，最多 10 段。開始必須早於
 結束，時段不可跨午夜，結束時間最遲為 `22:59`，令 60 分鐘補餵期限最遲在同日
@@ -179,8 +188,8 @@ Admin 面板以手機原生時間選擇器設定每段開始及結束時間，�
 ### 自動餵食的 60 分鐘補餵期限
 
 自動餵食時段是「安全網」，系統會在時段**結束後**判斷近期有沒有餵食。例如設定
-`05:30-06:00`，正常情況下會在約 `06:00` 檢查：如果 120 分鐘內已經餵過，便只把
-時段標記為已處理；如果沒有，才會透過 Home Assistant 自動出糧。
+`05:30-06:00`，正常情況下會在約 `06:00` 檢查：如果目前 cooldown 內已經餵過，
+便只把時段標記為已處理；如果沒有，才會透過 Home Assistant 自動出糧。
 
 如果 Backend 在時段結束一刻暫時停止，恢復後仍有 60 分鐘補餵期限：
 
