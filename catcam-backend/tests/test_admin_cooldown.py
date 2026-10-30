@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
@@ -159,6 +160,84 @@ class AdminEndpointTests(unittest.IsolatedAsyncioTestCase):
         mark_covered.assert_called_once_with(fed_at)
         self.assertEqual(result["fed_at"], fed_at.isoformat())
         self.assertEqual(result["seconds_until_next"], 7200)
+
+
+class RecorderNotificationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_auto_source_records_clip_then_sends_auto_notification(self):
+        fed_at = datetime(2026, 10, 30, 7, 30, tzinfo=HK)
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            settings = SimpleNamespace(
+                post_roll_seconds=0,
+                pre_roll_seconds=15,
+                recording_seconds=60,
+                notify_visitor_feeds=True,
+                notify_auto_feeds=True,
+            )
+
+            async def create_clip(final_path, _seconds):
+                final_path.write_bytes(b"test mp4")
+
+            with (
+                patch.object(recorder, "get_settings", return_value=settings),
+                patch.object(recorder, "recordings_dir", return_value=Path(tempdir)),
+                patch.object(recorder.asyncio, "sleep", new_callable=AsyncMock),
+                patch.object(recorder.buffer, "segments_covering", return_value=[]),
+                patch.object(
+                    recorder,
+                    "_record_clip_live_export",
+                    new_callable=AsyncMock,
+                    side_effect=create_clip,
+                ),
+                patch.object(recorder.db, "set_feed_event_clip") as set_clip,
+                patch.object(recorder, "_cleanup_old"),
+                patch.object(
+                    recorder,
+                    "_notify_auto_feed",
+                    new_callable=AsyncMock,
+                ) as notify_auto,
+                patch.object(
+                    recorder,
+                    "_notify_visitor_feed",
+                    new_callable=AsyncMock,
+                ) as notify_visitor,
+            ):
+                await recorder._record_clip(fed_at, visitor=None, source="auto")
+
+        clip_name = "2026-10-30_073000.mp4"
+        set_clip.assert_called_once()
+        self.assertEqual(set_clip.call_args.args[:2], (fed_at, clip_name))
+        notify_auto.assert_awaited_once_with(fed_at, clip_name)
+        notify_visitor.assert_not_awaited()
+
+    async def test_auto_feed_notification_has_clip_but_no_ip(self):
+        fed_at = datetime(2026, 10, 30, 7, 30, tzinfo=HK)
+        clip_name = "2026-10-30_073000.mp4"
+
+        with patch.object(recorder.notify, "send", new_callable=AsyncMock) as send:
+            await recorder._notify_auto_feed(fed_at, clip_name)
+
+        send.assert_awaited_once()
+        message = send.await_args.args[0]
+        self.assertEqual(
+            message,
+            "🤖 自動餵食咗 Roll Roll\n"
+            "🕐 2026-10-30 07:30\n"
+            "📹 錄影片段：https://cat.kelvinp.work/clips/2026-10-30_073000.mp4",
+        )
+        self.assertNotIn("IP", message)
+        self.assertNotIn("🌐", message)
+
+    async def test_auto_feed_notification_reports_failed_recording_without_ip(self):
+        fed_at = datetime(2026, 10, 30, 7, 30, tzinfo=HK)
+
+        with patch.object(recorder.notify, "send", new_callable=AsyncMock) as send:
+            await recorder._notify_auto_feed(fed_at, None)
+
+        message = send.await_args.args[0]
+        self.assertIn("🤖 自動餵食咗 Roll Roll", message)
+        self.assertIn("📹 錄影片段整唔到", message)
+        self.assertNotIn("🌐", message)
 
 
 if __name__ == "__main__":

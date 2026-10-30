@@ -61,7 +61,27 @@ async def _notify_visitor_feed(when: datetime, visitor: dict, clip_name: str | N
     await notify.send("\n".join(lines))
 
 
-async def _record_clip(when: datetime, visitor: dict | None = None) -> None:
+async def _notify_auto_feed(when: datetime, clip_name: str | None) -> None:
+    """Notify the owner about a CatCam scheduler feed, without IP metadata."""
+    s = get_settings()
+    lines = [
+        "🤖 自動餵食咗 Roll Roll",
+        f"🕐 {when.strftime('%Y-%m-%d %H:%M')}",
+    ]
+    if clip_name:
+        lines.append(
+            f"📹 錄影片段：{s.public_base_url.rstrip('/')}/clips/{clip_name}"
+        )
+    else:
+        lines.append("📹 錄影片段整唔到")
+    await notify.send("\n".join(lines))
+
+
+async def _record_clip(
+    when: datetime,
+    visitor: dict | None = None,
+    source: str = "visitor",
+) -> None:
     s = get_settings()
     final_path = recordings_dir() / (when.strftime(FILENAME_FMT) + ".mp4")
 
@@ -128,10 +148,13 @@ async def _record_clip(when: datetime, visitor: dict | None = None) -> None:
     else:
         logger.warning("recorder: no clip produced for trigger at %s", when)
 
-    # Telegram alert for a genuine web-visitor feed (sent even if the clip
-    # failed, just without the link) — app/button/admin feeds have no marker
+    # Telegram alerts are sent after recording so every successful message
+    # carries a ready-to-play clip. Visitor alerts include IP/country; an
+    # auto-feed alert deliberately has no IP because no visitor triggered it.
     if visitor and get_settings().notify_visitor_feeds:
         await _notify_visitor_feed(when, visitor, clip_name)
+    elif source == "auto" and get_settings().notify_auto_feeds:
+        await _notify_auto_feed(when, clip_name)
 
 
 async def _record_clip_live_export(final_path: Path, seconds: int) -> None:
@@ -237,7 +260,7 @@ async def _poll_loop() -> None:
                     source=source,
                     note=note,
                 )
-                asyncio.create_task(_record_clip(when, visitor))
+                asyncio.create_task(_record_clip(when, visitor, source))
             last_val = val
 
 

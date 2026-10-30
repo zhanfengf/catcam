@@ -278,10 +278,25 @@ fire-and-forget，Telegram 不會阻塞監察 loop；未設定憑證時則完全
 接線方式如下：`/feed` 會把訪客 IP 及國家暫存在短期
 `visitor_feed_pending` marker；recorder 偵測到相符的出糧後會取出 marker，影片
 完成時再由 `recorder._notify_visitor_feed` 發送提示。**只有網站 `/feed` 會設定
-這個 marker**；PetKit App、機身按鈕、排程自動餵食及 Admin 餵食都沒有 marker
-或 IP，因此不會發送通知。國家資料來自 Cloudflare 的 `cf-ipcountry` header，
+這個 marker**；PetKit App、機身按鈕及 Admin 餵食都沒有 marker 或 IP，因此不會
+發送訪客通知。排程自動餵食另有專屬通知，詳見下一節。國家資料來自 Cloudflare
+的 `cf-ipcountry` header，
 只有國家級別，沒有外部 geo-IP，所以沒有城市或地區資料。影片連結以
 `public_base_url` 組成；設定 `notify_visitor_feeds=false` 可關閉功能。
+
+### 自動餵食提示（Telegram）
+
+CatCam 自動餵食安全網成功出糧後，recorder 會照常製作餵食影片，並在影片完成時
+發送 Telegram 通知。由於這次出糧由系統排程觸發，通知不會顯示 IP 或國家：
+
+```
+🤖 自動餵食咗 Roll Roll
+🕐 2026-10-30 07:30
+📹 錄影片段：https://cat.kelvinp.work/clips/2026-10-30_073000.mp4
+```
+
+通知共用 `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` 及 `PUBLIC_BASE_URL`；設定
+`notify_auto_feeds=false` 可單獨關閉自動餵食通知，而不影響訪客餵食或直播中斷通知。
 
 ## 公告欄
 

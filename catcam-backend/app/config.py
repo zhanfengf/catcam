@@ -73,9 +73,11 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
 
-    # push a Telegram alert (time + IP + country + clip URL) for each genuine
-    # web-visitor feed; clip links are built off this public base
+    # push Telegram alerts after a feed clip is ready. Visitor alerts include
+    # IP + country; auto-feed alerts deliberately contain no IP metadata.
+    # Clip links are built off this public base.
     notify_visitor_feeds: bool = True
+    notify_auto_feeds: bool = True
     public_base_url: str = "https://cat.kelvinp.work"
 
     @property
