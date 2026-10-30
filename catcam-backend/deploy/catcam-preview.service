@@ -7,10 +7,10 @@ Wants=network-online.target
 Type=simple
 User=catcam
 WorkingDirectory=/opt/catcam-preview/backend
-# Reuse only the Admin signature secret and harmless display settings. Every
-# hardware, notification and storage setting below overrides the production
-# file, so Preview has no route to the real feeder or production database.
-EnvironmentFile=/opt/catcam-backend/.env
+# preview.env is generated on the CT with only the existing ADMIN_TOKEN line.
+# Never load the production .env here: EnvironmentFile precedence could let a
+# production DB/HA setting override an Environment= safety value below.
+EnvironmentFile=/opt/catcam-preview/preview.env
 Environment=PREVIEW_MODE=true
 Environment=DB_PATH=/opt/catcam-preview/data/catcam-preview.db
 Environment=HA_URL=
