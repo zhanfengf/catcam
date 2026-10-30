@@ -9,7 +9,7 @@ go2rtc 嘅直播串流。
 觀眾 → cat.kelvinp.work → Caddy(:80, CT 114)
         ├─ /                                                      → 靜態 SvelteKit build
         ├─ /status /feed /admin/feed /admin/feed-test /admin/wet-food
-        │  /admin/announcement /admin/auto-feed /admin/fasting
+        │  /admin/cooldown /admin/announcement /admin/auto-feed /admin/fasting
         │  /admin/fasting/clear /admin/history /recordings /activity → reverse_proxy 127.0.0.1:8080（FastAPI 後端）
         ├─ /clips/*                                                → 靜態檔（FastAPI 寫落去嘅 60 秒餵食片，唔經後端）
         └─ /camera/*                                                → reverse_proxy 127.0.0.1:1984（go2rtc，rewrite 做 /api/*）
@@ -58,7 +58,9 @@ WebSocket + MSE 經 `/camera/ws?src=petkit_h264` 重新 serve 出嚟。前端
   訪客一入站就見到嘅公告彈窗文字（留空即隱藏）。
 - `POST /admin/cooldown`（⏱️ 公開餵食間隔）：百位、十位、個位三個原生選擇器
   合成 `120–240` 分鐘。儲存後現有倒數立即按原本 `last_fed_at` 重新計算；Frontend
-  會限制有效組合，Backend 亦會拒絕範圍外或非整數請求。
+  會限制有效組合，Backend 亦會拒絕範圍外或非整數請求。新增 Admin API 時亦要同步
+  更新兩份 Caddyfile 的 `@api path` 白名單，否則請求會誤落到 SPA fallback，畫面只會
+  顯示儲存失敗而 Backend 完全收不到請求。
 - `POST /admin/auto-feed`（🤖 自動餵食時段）：以手機原生 `time` picker 增刪最多
   10 個安全網時段。每段開始必須早過結束、唔可以跨午夜，結束最遲 `22:59`；前端
   即時提示，後端亦會二次驗證，無效 API 請求回傳 `422`。每個時段完結時，如果
