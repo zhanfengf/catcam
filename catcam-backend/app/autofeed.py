@@ -12,13 +12,14 @@ _CHECK_SECONDS = 60
 # how long after a window's end we'll still auto-feed. past this (e.g. the
 # service was down through the whole window) we skip rather than feed hours late
 _GRACE_MINUTES = 60
+_LATEST_END = time(22, 59)
 
 _task: asyncio.Task | None = None
 _scheduler_lock = asyncio.Lock()
 
 
 def parse_window(w: str) -> tuple[time, time] | None:
-    """`"HH:MM-HH:MM"` -> (start, end), or None if malformed / start >= end."""
+    """Parse one same-day window whose catch-up deadline cannot cross midnight."""
     try:
         a, b = w.split("-")
         sh, sm = (int(x) for x in a.split(":"))
@@ -26,9 +27,62 @@ def parse_window(w: str) -> tuple[time, time] | None:
         start, end = time(sh, sm), time(eh, em)
     except (ValueError, AttributeError):
         return None
-    if start >= end:
+    if start >= end or end > _LATEST_END:
         return None
     return start, end
+
+
+def normalise_windows(raw: object) -> tuple[list[str], list[str]]:
+    """Return canonical unique windows plus every rejected input value."""
+    if not isinstance(raw, list):
+        return [], [str(raw)]
+
+    windows: list[str] = []
+    invalid: list[str] = []
+    for value in raw:
+        original = str(value).strip()
+        parsed = parse_window(original)
+        if not original or not parsed:
+            invalid.append(original)
+            continue
+        start, end = parsed
+        canonical = f"{start.strftime('%H:%M')}-{end.strftime('%H:%M')}"
+        if canonical not in windows:
+            windows.append(canonical)
+
+    if len(windows) > 10:
+        invalid.extend(windows[10:])
+        windows = windows[:10]
+    return windows, invalid
+
+
+def replace_windows(windows: list[str], saved_at: datetime) -> list[str]:
+    """Save a schedule, prune obsolete handled keys and defer past new slots.
+
+    A newly-added window that has already ended today starts tomorrow instead
+    of being mistaken for a missed meal that should dispense immediately.
+    Existing windows keep their handled date so an ordinary save cannot erase
+    today's duplicate-feed protection.
+    """
+    previous = set(db.get_auto_feed_windows())
+    handled = db.get_auto_feed_handled()
+    today = saved_at.date().isoformat()
+    current_t = saved_at.timetz().replace(tzinfo=None)
+    deferred: list[str] = []
+
+    for window in windows:
+        parsed = parse_window(window)
+        if not parsed:
+            continue
+        _, end_t = parsed
+        if window not in previous and current_t >= end_t:
+            handled[window] = today
+            deferred.append(window)
+
+    handled = {window: handled[window] for window in windows if window in handled}
+    db.set_auto_feed_windows(windows)
+    db.set_auto_feed_handled(handled)
+    return deferred
 
 
 def scheduler_lock() -> asyncio.Lock:

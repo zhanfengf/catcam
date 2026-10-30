@@ -418,17 +418,26 @@ async def admin_set_auto_feed(request: Request):
         body = await request.json()
     except ValueError:
         body = {}
-    raw = body.get("windows")
-    windows: list[str] = []
-    for w in raw if isinstance(raw, list) else []:
-        w = str(w).strip()
-        if w and autofeed.parse_window(w) and w not in windows:
-            windows.append(w)
-        if len(windows) >= 10:
-            break
-    db.set_auto_feed_windows(windows)
+    windows, invalid = autofeed.normalise_windows(body.get("windows"))
+    if invalid:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "ok": False,
+                "reason": "invalid_auto_feed_window",
+                "message": "時段必須同日完結、開始早過結束，而且結束時間最遲係 22:59",
+                "invalid_windows": invalid,
+            },
+        )
 
-    return {"ok": True, "auto_feed_windows": windows}
+    async with autofeed.scheduler_lock():
+        deferred = autofeed.replace_windows(windows, now())
+
+    return {
+        "ok": True,
+        "auto_feed_windows": windows,
+        "starts_tomorrow": deferred,
+    }
 
 
 @app.get("/admin/history")

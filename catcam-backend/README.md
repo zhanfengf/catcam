@@ -32,7 +32,7 @@
 | POST | `/admin/feed-test` | HMAC 簽署的模擬餵食。真正出糧以測試完整 pipeline，但不影響公開 cooldown 或「訪客餵食咗」次數。 |
 | POST | `/admin/wet-food` | HMAC 簽署的餵罐罐紀錄。重新開始公開 cooldown，但不呼叫 HA、不出乾糧、不錄影。 |
 | POST | `/admin/announcement` | HMAC 簽署。設定公告文字；傳入 `""` 可清除公告。 |
-| POST | `/admin/auto-feed` | HMAC 簽署。設定 `HH:MM-HH:MM` 自動餵食安全網時段清單。 |
+| POST | `/admin/auto-feed` | HMAC 簽署。設定同日、結束最遲 `22:59` 的 `HH:MM-HH:MM` 自動餵食安全網時段清單。 |
 | POST | `/admin/fasting` | HMAC 簽署。開啟禁食模式及暫停自動餵食安全網。 |
 | POST | `/admin/fasting/clear` | HMAC 簽署。解除禁食模式。 |
 | GET | `/admin/history` | HMAC 簽署。直接讀取 PetKit 今日出糧紀錄，不是本網站自己的 log。 |
@@ -373,6 +373,11 @@ PetKit，而是同步新增自己的 `feed_event.source="admin_wet_food"` row。
 保存於 `state` 的 `auto_feed_windows` key，並由 `/status` 回傳，讓 Admin 面板
 預先填入。每個時段內**如果無人餵過**，結束時便自動出一份。
 
+時段必須在同一曆日內開始及完結，開始早於結束，結束時間最遲為 `22:59`，最多
+10 段。`normalise_windows()` 會正規化為 `HH:MM-HH:MM`；任何無效值都令整個 API
+請求回傳 `422 invalid_auto_feed_window`，而不是靜默丟棄，避免直接 POST 繞過前端。
+`22:59` 加上 60 分鐘寬限期最遲為同日 `23:59`，因此不會把補餵判斷帶到翌日。
+
 主人在設定時段內強制餵食或餵罐罐，會立即把該時段標記為已處理，即使時段長過
 120 分鐘亦一樣。主人操作與 scheduler 共用同一把 lock，因此在時段邊界按掣，
 不會與 scheduler race 而重複出糧。
@@ -390,6 +395,12 @@ PetKit，而是同步新增自己的 `feed_event.source="admin_wet_food"` row。
 不會再次觸發今日已處理時段。自動餵食**會**推進公開 cooldown：除 `admin_test`
 外，所有來源的 `record_feed` 都會更新 `last_fed_at`，與「下次可以餵：120 分鐘後」
 訊息一致。它在 `feed_log` 以 `auto:` 標記，因此不計入「訪客餵食咗」。
+
+`replace_windows()` 在 Admin 儲存時只保留仍存在於新 `auto_feed_windows` 清單的
+handled keys，已取消時段的舊 key 會移除；同一時段目前的處理日期則保留，避免普通
+儲存動作解除今日的防重複保護。毋須午夜清空，因為翌日日期不相同時 scheduler
+自然會重新處理。若一個**新加入**的時段在儲存一刻已經完結，系統先把它標記為今日
+已處理，並在 response 的 `starts_tomorrow` 列出，令它由明日生效而不會立即追補。
 
 自動餵食的 `feed_event` row 由唯一寫入者 **recorder** 建立，而不是 scheduler。
 recorder poller 偵測到出糧後，會呼叫 `pop_auto_feed_pending()`；marker 新鮮（少於

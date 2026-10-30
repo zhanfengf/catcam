@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from datetime import datetime, timedelta
@@ -48,6 +49,55 @@ class AdminCooldownDbTests(unittest.TestCase):
             db.get_auto_feed_handled(),
             {"05:00-08:00": "2026-10-29"},
         )
+
+    def test_auto_feed_windows_reject_cross_midnight_and_late_end(self):
+        windows, invalid = autofeed.normalise_windows([
+            "00:00-00:30",
+            "21:30-22:59",
+            "23:30-00:30",
+            "22:30-23:00",
+            "06:00-06:00",
+        ])
+
+        self.assertEqual(windows, ["00:00-00:30", "21:30-22:59"])
+        self.assertEqual(invalid, [
+            "23:30-00:30",
+            "22:30-23:00",
+            "06:00-06:00",
+        ])
+
+    def test_replacing_windows_prunes_old_keys_and_preserves_current_key(self):
+        db.set_auto_feed_windows(["05:30-06:00", "05:45-06:15"])
+        db.set_auto_feed_handled({
+            "05:30-06:00": "2026-10-30",
+            "05:45-06:15": "2026-10-28",
+        })
+
+        deferred = autofeed.replace_windows(
+            ["05:30-06:00", "18:00-18:30"],
+            datetime(2026, 10, 30, 12, 0, tzinfo=HK),
+        )
+
+        self.assertEqual(deferred, [])
+        self.assertEqual(
+            db.get_auto_feed_handled(),
+            {"05:30-06:00": "2026-10-30"},
+        )
+
+    def test_new_window_that_already_ended_starts_tomorrow(self):
+        db.set_auto_feed_windows(["05:30-06:00"])
+        db.set_auto_feed_handled({"05:30-06:00": "2026-10-30"})
+
+        deferred = autofeed.replace_windows(
+            ["05:30-06:00", "11:30-12:00"],
+            datetime(2026, 10, 30, 12, 10, tzinfo=HK),
+        )
+
+        self.assertEqual(deferred, ["11:30-12:00"])
+        self.assertEqual(db.get_auto_feed_handled(), {
+            "05:30-06:00": "2026-10-30",
+            "11:30-12:00": "2026-10-30",
+        })
 
     def test_force_feed_pending_marker_is_consumed_once(self):
         forced = datetime(2026, 10, 29, 18, 37, tzinfo=HK)
@@ -108,6 +158,66 @@ class AdminCooldownDbTests(unittest.TestCase):
 
 
 class AdminEndpointTests(unittest.IsolatedAsyncioTestCase):
+    @staticmethod
+    def _json_request(path: str, payload: dict) -> Request:
+        body = json.dumps(payload).encode()
+
+        async def receive():
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        return Request({
+            "type": "http",
+            "method": "POST",
+            "path": path,
+            "headers": [(b"content-type", b"application/json")],
+            "client": ("203.0.113.4", 12345),
+        }, receive)
+
+    async def test_auto_feed_api_rejects_cross_midnight_window(self):
+        request = self._json_request(
+            "/admin/auto-feed",
+            {"windows": ["23:30-00:30"]},
+        )
+
+        with (
+            patch.object(main, "check_ip", return_value=True),
+            patch.object(main, "verify_admin_signature", return_value=True),
+            patch.object(main.autofeed, "replace_windows") as replace_windows,
+        ):
+            result = await main.admin_set_auto_feed(request)
+
+        self.assertEqual(result.status_code, 422)
+        self.assertEqual(
+            json.loads(result.body)["reason"],
+            "invalid_auto_feed_window",
+        )
+        replace_windows.assert_not_called()
+
+    async def test_auto_feed_api_returns_past_new_windows_as_tomorrow(self):
+        saved_at = datetime(2026, 10, 30, 12, 10, tzinfo=HK)
+        request = self._json_request(
+            "/admin/auto-feed",
+            {"windows": ["07:00-07:30", "11:30-12:00"]},
+        )
+
+        with (
+            patch.object(main, "check_ip", return_value=True),
+            patch.object(main, "verify_admin_signature", return_value=True),
+            patch.object(main, "now", return_value=saved_at),
+            patch.object(
+                main.autofeed,
+                "replace_windows",
+                return_value=["11:30-12:00"],
+            ) as replace_windows,
+        ):
+            result = await main.admin_set_auto_feed(request)
+
+        replace_windows.assert_called_once_with(
+            ["07:00-07:30", "11:30-12:00"],
+            saved_at,
+        )
+        self.assertEqual(result["starts_tomorrow"], ["11:30-12:00"])
+
     async def test_force_feed_marks_window_and_returns_fresh_cooldown(self):
         forced = datetime(2026, 10, 29, 5, 45, tzinfo=HK)
         request = Request({

@@ -71,11 +71,19 @@
       announcementSaveFail: '儲存失敗',
       announcementBtnLabel: '睇公告',
       autoFeedSectionTitle: '🤖 自動餵食時段',
-      autoFeedHint: '每行一個時段 HH:MM-HH:MM。時段完結時如果冇人餵過，就自動餵一份。',
-      autoFeedPlaceholder: '例如：\n07:00-07:30\n18:00-18:30',
+      autoFeedHint: '揀開始及結束時間；結束最遲 22:59，時段唔可以跨午夜。時段完結時如果冇人餵過，就自動餵一份。',
+      autoFeedStartLabel: '開始',
+      autoFeedEndLabel: '結束',
+      autoFeedAddBtn: '新增時段',
+      autoFeedRemoveBtn: '刪除時段',
+      autoFeedEmpty: '未設定自動餵食時段。',
+      autoFeedInvalid: '請確認每段都有開始及結束時間、開始早過結束，而且結束時間不遲過 22:59。',
+      autoFeedDuplicate: '相同時段只需要設定一次。',
+      autoFeedLimit: '最多可以設定 10 個時段。',
       autoFeedSaveBtn: '儲存時段',
       autoFeedSaving: '儲存緊…',
       autoFeedSaved: '自動餵食時段已更新！🤖',
+      autoFeedStartsTomorrow: (windows) => `已儲存；今日已完結嘅新時段會由聽日生效：${windows.join('、')}`,
       autoFeedSaveFail: '儲存失敗',
       activityAutoMsg: (w, min) => `🤖 冇人喺 ${w} 餵 Roll Roll，自動餵咗一份乾糧。下次可以餵：${min} 分鐘後`,
       wrongPwFallback: '密碼唔啱或者已過期',
@@ -165,11 +173,19 @@
       announcementSaveFail: 'Save failed',
       announcementBtnLabel: 'View announcement',
       autoFeedSectionTitle: '🤖 Auto-feed windows',
-      autoFeedHint: 'One window per line, HH:MM-HH:MM. If no one feeds during a window, the cat is auto-fed when it ends.',
-      autoFeedPlaceholder: 'e.g.\n07:00-07:30\n18:00-18:30',
+      autoFeedHint: 'Choose start and end times. End by 22:59; windows cannot cross midnight. If no one feeds, one portion is dispensed when the window ends.',
+      autoFeedStartLabel: 'Start',
+      autoFeedEndLabel: 'End',
+      autoFeedAddBtn: 'Add window',
+      autoFeedRemoveBtn: 'Remove window',
+      autoFeedEmpty: 'No auto-feed windows set.',
+      autoFeedInvalid: 'Give every window a start and end, with start before end and end no later than 22:59.',
+      autoFeedDuplicate: 'Each window only needs to be added once.',
+      autoFeedLimit: 'You can set up to 10 windows.',
       autoFeedSaveBtn: 'Save windows',
       autoFeedSaving: 'Saving…',
       autoFeedSaved: 'Auto-feed windows updated! 🤖',
+      autoFeedStartsTomorrow: (windows) => `Saved. New windows that already ended today start tomorrow: ${windows.join(', ')}`,
       autoFeedSaveFail: 'Save failed',
       activityAutoMsg: (w, min) => `🤖 No one fed Roll Roll during ${w}, auto-fed a portion. Next feed in ${min} min`,
       wrongPwFallback: 'Wrong password or expired',
@@ -306,6 +322,7 @@
   let announcementDraft = null;
   let savingAnnouncement = false;
   let autoFeedDraft = null;
+  let autoFeedError = '';
   let savingAutoFeed = false;
   let startingFasting = false;
   let clearingFasting = false;
@@ -471,6 +488,7 @@
     history = null;
     announcementDraft = null;
     autoFeedDraft = null;
+    autoFeedError = '';
   }
 
   function formatPetkitTime(ts) {
@@ -576,9 +594,16 @@
     announcementDraft = status.announcement ?? '';
   }
 
-  // one-time prefill of the auto-feed windows textarea (same guard as above)
+  function autoFeedRows(windows) {
+    return (windows ?? []).map((window) => {
+      const [start = '', end = ''] = window.split('-');
+      return { start, end };
+    });
+  }
+
+  // one-time prefill of the auto-feed time pickers (same guard as above)
   $: if (adminToken && status && autoFeedDraft === null) {
-    autoFeedDraft = (status.auto_feed_windows ?? []).join('\n');
+    autoFeedDraft = autoFeedRows(status.auto_feed_windows);
   }
 
   async function onSaveAnnouncement() {
@@ -599,24 +624,50 @@
 
   async function onSaveAutoFeed() {
     if (savingAutoFeed || !adminToken) return;
+    autoFeedError = '';
+    const windows = [];
+    for (const row of autoFeedDraft ?? []) {
+      if (!row.start || !row.end || row.start >= row.end || row.end > '22:59') {
+        autoFeedError = t.autoFeedInvalid;
+        return;
+      }
+      const window = `${row.start}-${row.end}`;
+      if (windows.includes(window)) {
+        autoFeedError = t.autoFeedDuplicate;
+        return;
+      }
+      windows.push(window);
+    }
     savingAutoFeed = true;
-    const windows = (autoFeedDraft ?? '')
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean);
     const { httpOk, data } = await adminSetAutoFeed(adminToken, windows);
     savingAutoFeed = false;
     if (httpOk && data.ok) {
-      // reflect the server's validated/normalised list back into the textarea
-      autoFeedDraft = (data.auto_feed_windows ?? []).join('\n');
-      showToast('ok', t.autoFeedSaved);
+      // reflect the server's validated/normalised list back into the pickers
+      autoFeedDraft = autoFeedRows(data.auto_feed_windows);
+      const deferred = data.starts_tomorrow ?? [];
+      showToast('ok', deferred.length ? t.autoFeedStartsTomorrow(deferred) : t.autoFeedSaved);
     } else {
-      showToast('err', data.message || t.autoFeedSaveFail);
+      autoFeedError = data.message || t.autoFeedSaveFail;
+      showToast('err', autoFeedError);
       if (data.reason === 'unauthorized') {
         lockAdmin();
       }
     }
     await refresh();
+  }
+
+  function addAutoFeedWindow() {
+    if ((autoFeedDraft?.length ?? 0) >= 10) {
+      autoFeedError = t.autoFeedLimit;
+      return;
+    }
+    autoFeedDraft = [...(autoFeedDraft ?? []), { start: '07:00', end: '07:30' }];
+    autoFeedError = '';
+  }
+
+  function removeAutoFeedWindow(index) {
+    autoFeedDraft = (autoFeedDraft ?? []).filter((_, i) => i !== index);
+    autoFeedError = '';
   }
 
   async function onStartFasting() {
@@ -881,13 +932,66 @@
         <div class="history-head">
           <div class="history-title">{t.autoFeedSectionTitle}</div>
         </div>
-        <p class="history-note">{t.autoFeedHint}</p>
-        <textarea
-          class="announcement-input"
-          placeholder={t.autoFeedPlaceholder}
-          bind:value={autoFeedDraft}
-          rows="3"
-        ></textarea>
+        <p class="history-note" id="auto-feed-hint">{t.autoFeedHint}</p>
+        {#if autoFeedDraft?.length}
+          <div class="auto-feed-windows" aria-describedby="auto-feed-hint">
+            {#each autoFeedDraft as row, index}
+              <div class="auto-feed-row">
+                <label class="auto-feed-field" for={`auto-feed-start-${index}`}>
+                  <span>{t.autoFeedStartLabel}</span>
+                  <input
+                    id={`auto-feed-start-${index}`}
+                    type="time"
+                    min="00:00"
+                    max="22:58"
+                    step="60"
+                    bind:value={row.start}
+                    on:input={() => (autoFeedError = '')}
+                  />
+                </label>
+                <label class="auto-feed-field" for={`auto-feed-end-${index}`}>
+                  <span>{t.autoFeedEndLabel}</span>
+                  <input
+                    id={`auto-feed-end-${index}`}
+                    type="time"
+                    min="00:01"
+                    max="22:59"
+                    step="60"
+                    bind:value={row.end}
+                    on:input={() => (autoFeedError = '')}
+                  />
+                </label>
+                <button
+                  type="button"
+                  class="auto-feed-remove"
+                  aria-label={`${t.autoFeedRemoveBtn} ${index + 1}`}
+                  title={t.autoFeedRemoveBtn}
+                  on:click={() => removeAutoFeedWindow(index)}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M5 12h14" />
+                  </svg>
+                </button>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <p class="auto-feed-empty">{t.autoFeedEmpty}</p>
+        {/if}
+        {#if autoFeedError}
+          <p class="auto-feed-error" role="alert" aria-live="polite">{autoFeedError}</p>
+        {/if}
+        <button
+          type="button"
+          class="auto-feed-add"
+          disabled={(autoFeedDraft?.length ?? 0) >= 10}
+          on:click={addAutoFeedWindow}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          {t.autoFeedAddBtn}
+        </button>
         <button class="admin-btn" disabled={savingAutoFeed} on:click={onSaveAutoFeed}>
           {savingAutoFeed ? t.autoFeedSaving : t.autoFeedSaveBtn}
         </button>
@@ -1790,6 +1894,111 @@
     resize: vertical;
     margin-bottom: 8px;
     box-sizing: border-box;
+  }
+
+  .auto-feed-windows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .auto-feed-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+    gap: 8px;
+    align-items: end;
+  }
+  .auto-feed-field {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+  }
+  .auto-feed-field input {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    box-sizing: border-box;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    padding: 8px 10px;
+    background: var(--bg, #ffffff);
+    color: inherit;
+    font: inherit;
+    font-size: 16px;
+  }
+  .auto-feed-field input:focus-visible,
+  .auto-feed-add:focus-visible,
+  .auto-feed-remove:focus-visible {
+    outline: 3px solid rgba(6, 201, 136, 0.28);
+    outline-offset: 2px;
+  }
+  .auto-feed-add,
+  .auto-feed-remove {
+    min-height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: var(--bg-soft);
+    color: var(--accent-strong);
+    cursor: var(--cursor-pointer);
+    transition: border-color 180ms ease, background 180ms ease;
+  }
+  .auto-feed-add:hover,
+  .auto-feed-remove:hover {
+    border-color: var(--accent-strong);
+    background: rgba(6, 201, 136, 0.1);
+  }
+  .auto-feed-add {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    font-weight: 700;
+  }
+  .auto-feed-add:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .auto-feed-remove {
+    width: 44px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    color: var(--err);
+  }
+  .auto-feed-add svg,
+  .auto-feed-remove svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+  .auto-feed-empty,
+  .auto-feed-error {
+    margin: 0 0 8px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .auto-feed-empty {
+    color: var(--text-dim);
+  }
+  .auto-feed-error {
+    color: var(--err);
+    font-weight: 600;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .auto-feed-add,
+    .auto-feed-remove {
+      transition: none;
+    }
   }
 
   .info-modal {
