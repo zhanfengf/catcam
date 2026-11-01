@@ -100,6 +100,8 @@
       wrongPwFallback: '密碼唔啱或者已過期',
       adminLockBtn: '🔒 鎖返',
       refreshLabel: '重新整理鏡頭',
+      musicPlay: '開啟背景音樂',
+      musicPause: '暫停背景音樂',
       durH: (h, m) => `${h} 小時 ${m} 分鐘`,
       durM: (m, s) => `${m} 分 ${s} 秒`,
       durS: (s) => `${s} 秒`,
@@ -213,6 +215,8 @@
       wrongPwFallback: 'Wrong password or expired',
       adminLockBtn: '🔒 Lock',
       refreshLabel: 'Refresh camera',
+      musicPlay: 'Play background music',
+      musicPause: 'Pause background music',
       durH: (h, m) => `${h}h ${m}m`,
       durM: (m, s) => `${m}m ${s}s`,
       durS: (s) => `${s}s`,
@@ -268,6 +272,49 @@
   }
 
   let videoRtcEl;
+  let musicEl;
+  let musicPlaying = false;
+  let musicAutoStartPending = true;
+  let musicWasPlayingWhenHidden = false;
+
+  async function playMusic() {
+    if (!musicEl) return;
+    try {
+      await musicEl.play();
+      musicAutoStartPending = false;
+    } catch (error) {
+      // Audible autoplay may be blocked until a real visitor interaction.
+      musicPlaying = false;
+    }
+  }
+
+  function startMusicOnFirstInteraction(event) {
+    if (!musicAutoStartPending || !musicEl?.paused || event.target?.closest?.('.music-control')) return;
+    // Run play() inside the trusted click handler, before any async work.
+    playMusic();
+  }
+
+  function toggleMusic() {
+    if (!musicEl) return;
+    if (musicEl.paused) playMusic();
+    else {
+      musicAutoStartPending = false;
+      musicEl.pause();
+    }
+  }
+
+  function handleMusicVisibilityChange() {
+    if (!musicEl) return;
+    if (document.hidden) {
+      musicWasPlayingWhenHidden = !musicEl.paused;
+      musicEl.pause();
+    } else if (musicWasPlayingWhenHidden) {
+      musicWasPlayingWhenHidden = false;
+      // If the browser blocks resuming, the next real tap can try again.
+      musicAutoStartPending = true;
+      playMusic();
+    }
+  }
 
   class CatCamVideo extends VideoRTC {
     constructor() {
@@ -821,6 +868,9 @@
   }
 
   onMount(() => {
+    playMusic();
+    document.addEventListener('click', startMusicOnFirstInteraction, true);
+    document.addEventListener('visibilitychange', handleMusicVisibilityChange);
     lang = localStorage.getItem(LANG_KEY) || detectLang();
     adminToken = localStorage.getItem(ADMIN_TOKEN_KEY);
     if (adminToken) loadHistory();
@@ -847,6 +897,9 @@
   });
 
   onDestroy(() => {
+    document.removeEventListener('click', startMusicOnFirstInteraction, true);
+    document.removeEventListener('visibilitychange', handleMusicVisibilityChange);
+    musicEl?.pause();
     clearInterval(pollTimer);
     clearInterval(tickTimer);
     clearInterval(cameraCheckTimer);
@@ -862,6 +915,15 @@
 </svelte:head>
 
 <main>
+  <audio
+    bind:this={musicEl}
+    src="/music/warm-memory-10-percent.mp3"
+    loop
+    preload="auto"
+    on:play={() => (musicPlaying = true)}
+    on:pause={() => (musicPlaying = false)}
+    on:error={() => (musicPlaying = false)}
+  ></audio>
   {#if status?.preview_mode}
     <div class="preview-banner" role="status">{t.previewBanner}</div>
   {/if}
@@ -900,6 +962,17 @@
     <div class="live-main">
       <section class="stage">
         <video-rtc class="stage-cam" bind:this={videoRtcEl}></video-rtc>
+        <button class="music-control" type="button" on:click={toggleMusic} aria-label={musicPlaying ? t.musicPause : t.musicPlay} title={musicPlaying ? t.musicPause : t.musicPlay} aria-pressed={musicPlaying}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M11 5 6 9H3v6h3l5 4V5Z" />
+            {#if musicPlaying}
+              <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+              <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+            {:else}
+              <path d="m16 9 5 6m0-6-5 6" />
+            {/if}
+          </svg>
+        </button>
         <button class="stage-refresh" on:click={refreshCamera} aria-label={t.refreshLabel}>↻</button>
         <div class="stage-watermark">cat.kelvinp.work</div>
         {#if status?.reason === 'fasting'}
@@ -1320,6 +1393,29 @@
 {/if}
 
 <style>
+  .music-control {
+    position: absolute;
+    top: 10px;
+    right: 64px;
+    z-index: 2;
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.45);
+    color: #fff;
+    cursor: var(--cursor-pointer);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .music-control svg { width: 22px; height: 22px; }
+  .music-control:hover,
+  .music-control:focus-visible {
+    background: rgba(0, 0, 0, 0.7);
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+  }
   .preview-banner {
     position: sticky;
     top: 8px;
