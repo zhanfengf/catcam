@@ -19,8 +19,7 @@ go2rtc (WebSocket + MSE)  ──►  Home Assistant WHEP  ──►  📷 PetKit
 
 ### 隔離 Preview 環境
 
-新功能先部署到 `cat-preview.kelvinp.work` 驗收，不直接改動正式
-`cat.kelvinp.work`。Preview 使用 port `8081`、獨立
+新功能先部署到 Preview 環境驗收，不直接改動正式站。Preview 使用 port `8081`、獨立
 `/opt/catcam-preview/data/catcam-preview.db`，並以 `PREVIEW_MODE=true` 運行。
 它不載入 HA 或 Telegram 憑證，不啟動 recorder、buffer、streamwatch、highlights
 或 feedwatch；所有訪客／Admin／自動餵食都只寫入 Preview DB。畫面頂部會固定顯示
@@ -324,7 +323,7 @@ cp .env.example .env        # 然後設定 HA_TOKEN
 cd catcam-frontend
 cp .env.example .env
 npm install
-npm run dev                 # http://localhost:5173
+npm run dev                 # 啟動本機開發伺服器
 ```
 
 ## 設定及秘密資料

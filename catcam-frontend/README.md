@@ -6,7 +6,7 @@
 go2rtc 嘅直播串流。
 
 ```
-觀眾 → cat.kelvinp.work → Caddy(:80, CT 114)
+觀眾 → 正式站 → Caddy(:80, CT 114)
         ├─ /                                                      → 靜態 SvelteKit build
         ├─ /status /feed /admin/feed /admin/feed-test /admin/wet-food
         │  /admin/cooldown /admin/announcement /admin/auto-feed /admin/fasting
@@ -52,7 +52,7 @@ WebSocket + MSE 經 `/camera/ws?src=petkit_h264` 重新 serve 出嚟。前端
 之後,前端用 Web Crypto（`crypto.subtle`）對請求做 HMAC-SHA256 簽名,解鎖
 之後有幾個功能：
 
-開發版部署在 `cat-preview.kelvinp.work`，使用獨立 Backend／DB。當 `/status`
+開發版部署在 Preview 環境，使用獨立 Backend／DB。當 `/status`
 回傳 `preview_mode: true`，頁頂會固定顯示「模擬環境」警告；所有餵食按鈕只建立
 測試紀錄，不會接觸真正餵食機。Preview 可共用唯讀直播畫面，方便用真實版面測試。
 
@@ -200,18 +200,18 @@ response 靜默跌去 SPA fallback，攞住 HTML 當 JSON parse，前端顯示�
 /admin/fasting /admin/fasting/clear /admin/history /recordings /activity` 代理去後端、
 `/clips/*` 直接 serve 後端寫落 CT 本機嘅餵食片、
 `/camera/*` 代理去 go2rtc。CT 入面要裝 Caddy(見官方 apt repo 說明)同
-go2rtc,並喺 Cloudflare Tunnel 加一條 route:`cat.kelvinp.work` →
-`http://<CT IP>:80`。新增任何一個 `/admin/*` endpoint,呢度嘅路由清單都要
+go2rtc,並喺 Cloudflare Tunnel 加一條由正式站網域指向 CT 114 port `80` 嘅 route。
+新增任何一個 `/admin/*` endpoint,呢度嘅路由清單都要
 同步加返,唔係得 `app/main.py` 加個 route 就夠。
 
 ## 本機預覽（開發用）
 
 ```bash
-npm run dev        # http://localhost:5173，會打你 VITE_API_BASE 設定嘅後端
+npm run dev        # 啟動本機開發伺服器，會打你 VITE_API_BASE 設定嘅後端
 ```
 
-開發時把 `VITE_API_BASE` 設成後端可達位址(例如 `http://ip:8080`),
-並記得後端 `.env` 的 `CORS_ORIGINS` 要允許 `http://localhost:5173`。
+開發時把 `VITE_API_BASE` 設成後端可達位址，
+並記得後端 `.env` 的 `CORS_ORIGINS` 要允許本機開發伺服器嘅 origin。
 本機冇 go2rtc 嘅話,直播畫面會顯示連線中/連唔到,唔影響餵貓功能測試。
 
 ## 設計風格

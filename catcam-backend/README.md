@@ -25,7 +25,7 @@
 
 ## Preview 模擬模式
 
-`PREVIEW_MODE=true` 專供 `cat-preview.kelvinp.work`。服務使用獨立工作目錄、port
+`PREVIEW_MODE=true` 專供 Preview 環境。服務使用獨立工作目錄、port
 `8081` 及 SQLite，並在 systemd 明確覆寫 `HA_URL`、`HA_TOKEN`、Telegram token
 為空。lifespan 只啟動自動餵食 scheduler，不會啟動 HA polling、buffer、recorder、
 highlights、feedwatch 或 streamwatch。
@@ -284,16 +284,16 @@ fire-and-forget，Telegram 不會阻塞監察 loop；未設定憑證時則完全
 看門狗仍會靜默偵測及自動修復。
 
 Backend 啟動時會安裝敏感 URL logging filter。即使 `httpx` 或通知模組記錄完整
-Telegram API request URL，bot token 亦會先被改寫成
-`https://api.telegram.org/bot[REDACTED]/...` 才輸出到 systemd journal，避免日後
-查閱或匯出 journal 時洩漏憑證。這項處理只影響 log 文字，不會改動實際 API request。
+Telegram API request URL，當中的 bot token 亦會先被改寫成 `[REDACTED]` 才輸出到
+systemd journal，避免日後查閱或匯出 journal 時洩漏憑證。這項處理只影響 log 文字，
+不會改動實際 API request。
 
 設定方法：
 
 1. 在 Telegram 向 **@BotFather** 發送 `/newbot`，再複製 bot **token**。
 2. 開啟新 bot 並向它發送任何訊息；用戶未先聯絡 bot 前，bot 無法主動傳訊。
-3. 執行 `curl https://api.telegram.org/bot<TOKEN>/getUpdates`，讀取
-   `result[].message.chat.id`，這就是 **chat id**。
+3. 使用 Telegram Bot API 的 `getUpdates` 方法，讀取
+   `result[].message.chat.id`，這就是 **chat id**。呼叫時請勿把 token 寫進公開紀錄。
 4. 把兩者寫入 `.env`：`TELEGRAM_BOT_TOKEN=…`、`TELEGRAM_CHAT_ID=…`，然後重啟。
 
 > **注意——強制使用 IPv4：** CT 114 會把 `api.telegram.org` 解析成 IPv6，
@@ -310,7 +310,7 @@ Telegram API request URL，bot token 亦會先被改寫成
 🍚 有訪客餵咗 Roll Roll
 🕐 2026-10-27 08:41
 🌐 203.0.113.45 · HK
-📹 https://cat.kelvinp.work/clips/2026-10-27_084100.mp4
+📹 餵食片段連結
 ```
 
 接線方式如下：`/feed` 會把訪客 IP 及國家暫存在短期
@@ -330,7 +330,7 @@ CatCam 自動餵食安全網成功出糧後，recorder 會照常製作餵食影�
 ```
 🤖 自動餵食咗 Roll Roll
 🕐 2026-10-30 07:30
-📹 錄影片段：https://cat.kelvinp.work/clips/2026-10-30_073000.mp4
+📹 錄影片段：餵食片段連結
 ```
 
 通知共用 `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID` 及 `PUBLIC_BASE_URL`；設定
@@ -503,7 +503,7 @@ curl -X POST localhost:8080/feed -H 'cf-connecting-ip: 1.2.3.4'
 ## 對外開放服務
 
 服務監聽 `127.0.0.1:8080`。把 SvelteKit app 放在前方，可以在同一個或另一個 CT，
-再新增指向 CT 的 Cloudflare Tunnel route，例如 `cat.kelvinp.work`。知道 domain 後，
+再新增指向 CT 的 Cloudflare Tunnel route。知道網站網域後，
 在 `.env` 把 `CORS_ORIGINS` 設成網站 origin；`*` 只應用於本機測試。
 
 ## 注意事項
