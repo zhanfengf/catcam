@@ -2447,7 +2447,11 @@
 
   @media (max-width: 520px) {
     .wet-reservation-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .wet-reservation-grid .auto-feed-field {
+      width: 100%;
+      max-width: none;
     }
     .cooldown-picker {
       grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
