@@ -2321,12 +2321,13 @@
   /* iOS WebKit can count date input padding outside width: 100%. */
   @supports (-webkit-touch-callout: none) {
     .wet-reservation-grid .auto-feed-field input[type='date'] {
-      height: 44px;
+      width: calc(100% - 2px);
+      height: 43px;
       padding: 0;
       text-align: center;
     }
     .wet-reservation-grid .auto-feed-field input[type='date']::-webkit-date-and-time-value {
-      line-height: 44px;
+      line-height: 43px;
     }
   }
   .wet-reservation-list {

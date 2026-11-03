@@ -92,7 +92,7 @@ Token 存喺 `localStorage`，唔會傳明文密碼。
 
 ### iPhone 日期／時間輸入欄排版備忘
 
-2026-11-04：預留罐頭餐的日期欄在 iPhone Safari／Chrome 比開始、結束時間欄稍闊；Android Chrome 三欄等闊。這與 [WebKit Bug 301648](https://bugs.webkit.org/show_bug.cgi?id=301648) 記錄的 iOS 日期／時間輸入欄在 `width: 100%` 加 `padding` 時可能超出預期寬度的現象吻合。修正集中在 `src/routes/+page.svelte` 的 `.wet-reservation-grid`：使用 `box-sizing: border-box`，並只在 `@supports (-webkit-touch-callout: none)` 下移除日期 input 的 padding、固定高度及置中；日期值另用 `::-webkit-date-and-time-value` 設定行高。開始／結束時間 input 應保留原有高度及內距；曾經把 iOS 修正套到所有 input，令時間欄高度改變。日後遇到相似問題，先對照外框闊度、高度及內部文字位置，分別驗證 iOS 與 Android，勿只憑桌面瀏覽器判斷。
+2026-11-04：預留罐頭餐的日期欄在 iPhone Safari／Chrome 比開始、結束時間欄稍闊；Android Chrome 三欄等闊。這與 [WebKit Bug 301648](https://bugs.webkit.org/show_bug.cgi?id=301648) 記錄的 iOS 日期／時間輸入欄在 `width: 100%` 加 `padding` 時可能超出預期寬度的現象吻合。修正集中在 `src/routes/+page.svelte` 的 `.wet-reservation-grid`：使用 `box-sizing: border-box`，並只在 `@supports (-webkit-touch-callout: none)` 下移除日期 input 的 padding、稍微收窄及調整高度；日期值另用 `::-webkit-date-and-time-value` 置中。開始／結束時間 input 保留原有高度及內距；曾經把 iOS 修正套到所有 input，令時間欄高度改變。正式版重新載入後，iPhone Mirroring 已確認三欄外框左右對齊、高度一致且文字置中。日後遇到相似問題，先對照外框闊度、高度及內部文字位置，分別驗證 iOS 與 Android，勿只憑桌面瀏覽器判斷。
 
 ## 餵貓掣狀態 + 公告彈窗
 
