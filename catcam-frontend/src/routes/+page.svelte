@@ -2318,6 +2318,17 @@
     max-width: 100%;
     box-sizing: border-box;
   }
+  /* iOS WebKit counts padding outside width: 100% on date/time inputs. */
+  @supports (-webkit-touch-callout: none) {
+    .wet-reservation-grid .auto-feed-field input {
+      height: 44px;
+      padding: 0;
+      text-align: center;
+    }
+    .wet-reservation-grid .auto-feed-field input[type='date']::-webkit-date-and-time-value {
+      line-height: 44px;
+    }
+  }
   .wet-reservation-list {
     display: grid;
     gap: 8px;
