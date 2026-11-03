@@ -2454,7 +2454,7 @@
       max-width: none;
     }
     .wet-reservation-grid .wet-reservation-date {
-      width: 90%;
+      width: 95%;
     }
     .cooldown-picker {
       grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
