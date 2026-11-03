@@ -251,6 +251,9 @@ def _record_detected_feed(when: datetime) -> tuple[str, str | None, dict | None]
         # public cooldown from detection time.
         db.set_last_fed_at(when)
     db.add_feed_event(when, source=source, note=note)
+    if source == "petkit":
+        from . import wet_reservation
+        wet_reservation.complete_or_cancel_for_feed(when, "petkit")
     return source, note, visitor
 
 

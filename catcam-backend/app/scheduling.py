@@ -81,6 +81,24 @@ def build_status(last_fed_at: datetime | None) -> dict:
     else:
         reason = "cooldown"
 
+    # A one-off wet-food booking blocks public kibble during its preparation
+    # and meal window. Import here to keep the time helpers independent.
+    from . import wet_reservation
+    reservation = wet_reservation.active_at(n)
+    wet_food_starts_at = None
+    seconds_until_wet_food = None
+    seconds_until_wet_food_end = None
+    wet_food_in_window = False
+    if reservation:
+        can_feed = False
+        reason = "wet_food_reserved"
+        wet_food_starts_at = datetime.fromisoformat(reservation["starts_at"])
+        seconds_until_wet_food = max(0, int((wet_food_starts_at - n).total_seconds()))
+        wet_food_in_window = n >= wet_food_starts_at
+        wet_food_ends_at = datetime.fromisoformat(reservation["ends_at"])
+        seconds_until_wet_food_end = max(0, int((wet_food_ends_at - n).total_seconds()))
+        nxt = next_window_open(max(nxt, wet_food_ends_at))
+
     return {
         "can_feed": can_feed,
         "reason": reason,
@@ -95,5 +113,9 @@ def build_status(last_fed_at: datetime | None) -> dict:
         "last_fed_at": last_fed_at.isoformat() if last_fed_at else None,
         "next_feed_at": nxt.isoformat(),
         "seconds_until_next": max(0, int((nxt - n).total_seconds())),
+        "wet_food_starts_at": wet_food_starts_at.isoformat() if wet_food_starts_at else None,
+        "seconds_until_wet_food": seconds_until_wet_food,
+        "seconds_until_wet_food_end": seconds_until_wet_food_end,
+        "wet_food_in_window": wet_food_in_window,
         "server_time": n.isoformat(),
     }

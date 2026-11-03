@@ -69,6 +69,7 @@ WebSocket + MSE 經 `/camera/ws?src=petkit_h264` 重新 serve 出嚟。前端
   `feed_event.source="admin_wet_food"`、由當刻重新計目前公開 cooldown；如果
   位於自動餵食時段，該時段會即時標記完成。按下後前端立即 reload
   `/activity`，所以所有開住頁面嘅訪客最遲亦會喺原本 30 秒 poll 內見到。
+- `GET/POST /admin/wet-food-reservation`（🥫 預留罐頭餐）：選指定香港日期、開始與結束時間；每個日期最多一段，長度 15–120 分鐘。餐前按目前 cooldown 禁止公開及相撞嘅自動出糧；時間不足時後端拒絕並提示最早開始時間。可編輯或經 `/admin/wet-food-reservation/cancel` 取消。Preview 會模擬完整規則，但不接觸真實餵食機。
 - `POST /admin/announcement`（📢 公告欄）：一個 textarea + 儲存掣,設定/清空
   訪客一入站就見到嘅公告彈窗文字（留空即隱藏）。
 - `POST /admin/cooldown`（⏱️ 公開餵食間隔）：百位、十位、個位三個原生選擇器

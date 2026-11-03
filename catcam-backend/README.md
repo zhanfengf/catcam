@@ -44,6 +44,8 @@ DB 建立模擬 `feed_log`／`feed_event`，永遠不呼叫 `ha.dispense()`。`/
 | POST | `/admin/feed` | HMAC 簽署的強制餵食，可繞過 cooldown 及開放時間；成功後重新開始公開 cooldown。 |
 | POST | `/admin/feed-test` | HMAC 簽署的模擬餵食。真正出糧以測試完整 pipeline，但不影響公開 cooldown 或「訪客餵食咗」次數。 |
 | POST | `/admin/wet-food` | HMAC 簽署的餵罐罐紀錄。重新開始公開 cooldown，但不呼叫 HA、不出乾糧、不錄影。 |
+| GET / POST | `/admin/wet-food-reservation` | HMAC 簽署。列出預約；或儲存指定香港日期、同日 15–120 分鐘的罐頭餐時段。 |
+| POST | `/admin/wet-food-reservation/cancel` | HMAC 簽署。取消指定日期的預約。 |
 | POST | `/admin/announcement` | HMAC 簽署。設定公告文字；傳入 `""` 可清除公告。 |
 | POST | `/admin/cooldown` | HMAC 簽署。保存 120–240 的整數分鐘並立即重新計算現有倒數。 |
 | POST | `/admin/auto-feed` | HMAC 簽署。設定同日、結束最遲 `22:59` 的 `HH:MM-HH:MM` 自動餵食安全網時段清單。 |
@@ -58,6 +60,7 @@ DB 建立模擬 `feed_log`／`feed_event`，永遠不呼叫 `ha.dispense()`。`/
 `429`；HA 無法連線則回傳 `502`。
 
 `POST /admin/feed`、`/admin/feed-test`、`/admin/wet-food`、
+`/admin/wet-food-reservation`、`/admin/wet-food-reservation/cancel`、
 `/admin/announcement`、`/admin/cooldown`、`/admin/auto-feed`、`/admin/fasting`、
 `/admin/fasting/clear` 及 `GET /admin/history` 都是秘密通道解鎖後使用的
 endpoints。用戶需要連按 logo 5 次並輸入 `ADMIN_TOKEN`。每個請求都必須以
@@ -106,6 +109,16 @@ PetKit App、機身按鈕或自動排程觸發，每次真實出糧都會令 cou
   timestamp，看似可直接使用；但它要等待裝置上傳 snapshot，可能延遲數分鐘至
   數小時。`times_dispensed` 只是沒有附圖的數字，真實出糧後數秒便會更新。實測
   手動餵食約 6 秒後 counter 已增加，但 `last_feed_event` 仍落後超過 1 小時。
+
+### 一次性罐頭餐預約（已於 Preview 驗證）
+
+`wet_food_reservation` 保存指定日期、開始／結束、狀態及取消原因；同日只容許一筆 `scheduled`。公開 `/status` 及 `/feed` 在 `開始時間 − 目前 cooldown` 至時段結束期間回傳 `wet_food_reserved`，`next_feed_at` 取原有公開規則與預約結束中較遲的時間。建立時如 `last_fed_at + cooldown > 開始時間`，回傳 `422 invalid_wet_food_reservation`，訊息列出最早可開始時間。
+
+`/status.seconds_until_wet_food` 專供前端顯示餐前倒數，更新預約開始時間會即時重算；進入預留時段後 `wet_food_in_window=true`，前端使用 `seconds_until_wet_food_end` 倒數至時段結束。`next_feed_at`／`seconds_until_next` 仍表示公開出乾糧最早時間，唔會混用。
+
+自動餵食時段若與餐前禁糧期／預留時段重疊，當日跳過並寫入 `auto_feed_skip_log`，同時維持原有 `auto_feed_handled` 去重。按餵罐罐可提早完成；時段結束未餵則恢復公開規則並 Telegram 通知。Admin 強制出糧、模擬出糧及裝置偵測到的 PetKit 出糧會取消有效預約；PetKit 出糧會 Telegram 通知。5 小時提醒保留，預約有效時加上「RollRoll等下食罐罐」。Preview 無 Telegram 憑證，通知不會外送。
+
+預約通知的逐字訊息範本及不發通知的情況，見[主 README 的「預留罐頭餐的 Telegram 訊息」](../README.md#預留罐頭餐的-telegram-訊息)。
 
 ## 餵食影片錄影
 

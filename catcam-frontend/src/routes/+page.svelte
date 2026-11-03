@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy, afterUpdate } from 'svelte';
   import '../app.css';
-  import { getStatus, feed, adminFeed, adminFeedTest, adminWetFood, adminSetAnnouncement, adminSetCooldown, adminSetAutoFeed, adminSetFasting, adminClearFasting, adminHistory, getRecordings, getActivity } from '$lib/api.js';
+  import { getStatus, feed, adminFeed, adminFeedTest, adminWetFood, adminGetWetReservation, adminSaveWetReservation, adminCancelWetReservation, adminSetAnnouncement, adminSetCooldown, adminSetAutoFeed, adminSetFasting, adminClearFasting, adminHistory, getRecordings, getActivity } from '$lib/api.js';
   import { VideoRTC } from '$lib/video-rtc.js';
 
   const ADMIN_TOKEN_KEY = 'catcam_admin_token';
@@ -64,6 +64,21 @@
       wetFoodReady: '🥫🐟 餵罐罐（唔出乾糧）',
       wetFoodFeeding: '記錄罐罐緊…',
       wetFoodFallback: '記低咗今餐罐罐！🥫🐱',
+      wetReservationTitle: '🥫 預留罐頭餐',
+      wetReservationHint: '每個香港日期只預留一次，時段 15–120 分鐘。餐前會按目前 Cooldown 暫停訪客及相撞嘅自動出糧。',
+      wetReservationDate: '日期',
+      wetReservationStart: '開始',
+      wetReservationEnd: '結束',
+      wetReservationSave: '儲存預約',
+      wetReservationCancel: '取消預約',
+      wetReservationSaved: '罐頭餐已預留！🥫',
+      wetReservationCancelled: '已取消罐頭餐預約',
+      wetReservationEmpty: '未有預約罐頭餐。',
+      wetReservationBlocked: 'RollRoll等下食罐罐',
+      wetReservationInWindow: 'RollRoll食罐罐時間',
+      wetReservationEdit: '改時間',
+      wetReservationCancelledByFeed: '已出乾糧，罐頭餐預約取消',
+      wetReservationCancelledByCooldown: 'Cooldown 已更新；餐前禁糧時間不足，罐頭餐預約取消',
       announcementSectionTitle: '📢 公告欄',
       announcementPlaceholder: '輸入公告內容，留空即係唔顯示',
       announcementSaveBtn: '儲存公告',
@@ -179,6 +194,21 @@
       wetFoodReady: '🥫🐟 Feed Wet Food (no kibble)',
       wetFoodFeeding: 'Logging wet food…',
       wetFoodFallback: 'Wet-food meal logged! 🥫🐱',
+      wetReservationTitle: '🥫 Reserve wet-food meal',
+      wetReservationHint: 'One reservation per Hong Kong date, 15–120 minutes. Public and overlapping auto-feeds pause during the cooldown before the meal.',
+      wetReservationDate: 'Date',
+      wetReservationStart: 'Start',
+      wetReservationEnd: 'End',
+      wetReservationSave: 'Save reservation',
+      wetReservationCancel: 'Cancel reservation',
+      wetReservationSaved: 'Wet-food meal reserved! 🥫',
+      wetReservationCancelled: 'Wet-food reservation cancelled',
+      wetReservationEmpty: 'No wet-food reservation.',
+      wetReservationBlocked: 'Roll Roll will have wet food soon',
+      wetReservationInWindow: 'Roll Roll wet-food meal time',
+      wetReservationEdit: 'Edit time',
+      wetReservationCancelledByFeed: 'Kibble dispensed; wet-food reservation cancelled',
+      wetReservationCancelledByCooldown: 'Cooldown updated; wet-food reservation cancelled because the preparation time is too short',
       announcementSectionTitle: '📢 Announcement',
       announcementPlaceholder: 'Announcement text, leave empty to hide it',
       announcementSaveBtn: 'Save announcement',
@@ -340,6 +370,8 @@
   }
 
   let status = null;
+  let localWetSecs = 0;
+  let localWetEndSecs = 0;
   $: displayTitle = status?.preview_mode ? `${t.title}(dev)` : t.title;
   let feeding = false;
   let localSecs = 0;
@@ -383,6 +415,10 @@
   let adminFeeding = false;
   let adminTesting = false;
   let wetFoodFeeding = false;
+  let wetReservations = [];
+  let wetReservationDraft = null;
+  let wetReservationError = '';
+  let savingWetReservation = false;
   let history = null;
   let historyLoading = false;
   let historyError = false;
@@ -403,6 +439,9 @@
     try {
       status = await getStatus();
       localSecs = status.seconds_until_next ?? 0;
+      localWetSecs = status.seconds_until_wet_food ?? 0;
+      localWetEndSecs = status.seconds_until_wet_food_end ?? 0;
+      if (adminToken) loadWetReservations();
     } catch (e) {
       showToast('err', t.connErr);
     }
@@ -551,6 +590,7 @@
     closeAdminModal();
     showToast('ok', t.unlockedToast);
     loadHistory();
+    loadWetReservations();
   }
 
   function lockAdmin() {
@@ -562,6 +602,8 @@
     cooldownDraft = null;
     autoFeedDraft = null;
     autoFeedError = '';
+    wetReservations = [];
+    wetReservationDraft = null;
   }
 
   function formatPetkitTime(ts) {
@@ -598,7 +640,8 @@
     const { httpOk, data } = await adminFeed(adminToken);
     adminFeeding = false;
     if (httpOk && data.ok) {
-      showToast('ok', data.message || t.adminFedFallback);
+      showToast(data.reservation_cancelled ? 'warn' : 'ok',
+        data.reservation_cancelled ? t.wetReservationCancelledByFeed : data.message || t.adminFedFallback);
     } else {
       showToast('err', data.message || t.wrongPwFallback);
       if (data.reason === 'unauthorized') {
@@ -607,6 +650,7 @@
     }
     await refresh();
     if (adminToken) loadHistory();
+    if (adminToken) loadWetReservations();
   }
 
   async function onAdminFeedTest() {
@@ -615,7 +659,8 @@
     const { httpOk, data } = await adminFeedTest(adminToken);
     adminTesting = false;
     if (httpOk && data.ok) {
-      showToast('ok', data.message || t.adminTestFallback);
+      showToast(data.reservation_cancelled ? 'warn' : 'ok',
+        data.reservation_cancelled ? t.wetReservationCancelledByFeed : data.message || t.adminTestFallback);
     } else {
       showToast('err', data.message || t.wrongPwFallback);
       if (data.reason === 'unauthorized') {
@@ -624,6 +669,7 @@
     }
     await refresh();
     if (adminToken) loadHistory();
+    if (adminToken) loadWetReservations();
   }
 
   async function onWetFood() {
@@ -643,6 +689,7 @@
       }
     }
     await refresh();
+    if (adminToken) loadWetReservations();
   }
 
   // pops up once per distinct announcement text — dismissing stores that
@@ -707,6 +754,47 @@
     autoFeedDraft = autoFeedRows(status.auto_feed_windows);
   }
 
+  $: if (adminToken && status && wetReservationDraft === null) {
+    wetReservationDraft = { date: status.server_time.slice(0, 10), start: '18:30', end: '19:30' };
+  }
+
+  async function loadWetReservations() {
+    if (!adminToken) return;
+    const { httpOk, data } = await adminGetWetReservation(adminToken);
+    if (httpOk && data.ok) wetReservations = data.reservations ?? [];
+  }
+
+  async function onSaveWetReservation() {
+    if (savingWetReservation || !adminToken || !wetReservationDraft) return;
+    wetReservationError = '';
+    savingWetReservation = true;
+    const { httpOk, data } = await adminSaveWetReservation(
+      adminToken, wetReservationDraft.date, wetReservationDraft.start, wetReservationDraft.end
+    );
+    savingWetReservation = false;
+    if (httpOk && data.ok) {
+      showToast('ok', t.wetReservationSaved);
+      await loadWetReservations();
+    } else {
+      wetReservationError = data.message || 'Could not save reservation';
+      if (data.reason === 'unauthorized') lockAdmin();
+    }
+    await refresh();
+  }
+
+  async function onCancelWetReservation(date) {
+    if (!adminToken) return;
+    const { httpOk, data } = await adminCancelWetReservation(adminToken, date);
+    if (httpOk && data.ok) {
+      showToast('ok', t.wetReservationCancelled);
+      await loadWetReservations();
+    } else {
+      wetReservationError = data.message || 'Could not cancel reservation';
+      if (data.reason === 'unauthorized') lockAdmin();
+    }
+    await refresh();
+  }
+
   async function onSaveAnnouncement() {
     if (savingAnnouncement || !adminToken) return;
     savingAnnouncement = true;
@@ -732,7 +820,9 @@
     savingCooldown = false;
     if (httpOk && data.ok) {
       cooldownDraft = cooldownDigits(data.cooldown_minutes);
-      showToast('ok', t.cooldownSaved(data.cooldown_minutes));
+      showToast(data.reservation_cancelled ? 'warn' : 'ok',
+        data.reservation_cancelled ? t.wetReservationCancelledByCooldown : t.cooldownSaved(data.cooldown_minutes));
+      if (data.reservation_cancelled) loadWetReservations();
     } else {
       showToast('err', data.message || t.cooldownSaveFail);
       if (data.reason === 'unauthorized') {
@@ -829,6 +919,10 @@
       ? t.feedBtnReady
       : status?.reason === 'fasting'
         ? t.fastingBtn
+        : status?.reason === 'wet_food_reserved'
+          ? status.wet_food_in_window
+            ? `${t.wetReservationInWindow} ${fmt(localWetEndSecs, t)}`.trim()
+            : `${t.wetReservationBlocked} ${fmt(localWetSecs, t)}`.trim()
         : status?.reason === 'ha_offline'
           ? t.feederOffline
           : status?.reason === 'stream_offline'
@@ -874,6 +968,7 @@
     lang = localStorage.getItem(LANG_KEY) || detectLang();
     adminToken = localStorage.getItem(ADMIN_TOKEN_KEY);
     if (adminToken) loadHistory();
+    if (adminToken) loadWetReservations();
     refresh();
     loadActivity();
     pollTimer = setInterval(refresh, 15000);
@@ -883,6 +978,8 @@
     tickTimer = setInterval(() => {
       if (localSecs > 0) localSecs -= 1;
       else if (status && !status.can_feed) refresh();
+      if (localWetSecs > 0) localWetSecs -= 1;
+      if (localWetEndSecs > 0) localWetEndSecs -= 1;
       // while the feeder/stream is offline, poll faster than the 15s main
       // cycle so the button snaps back the moment it recovers (e.g. right
       // after stream auto-recovery) instead of lingering on "直播中斷"
@@ -1061,6 +1158,46 @@
       <button class="admin-btn" disabled={wetFoodFeeding} on:click={onWetFood}>
         {wetFoodFeeding ? t.wetFoodFeeding : t.wetFoodReady}
       </button>
+
+      <div class="history">
+        <div class="history-head"><div class="history-title">{t.wetReservationTitle}</div></div>
+        <p class="history-note">{t.wetReservationHint}</p>
+        {#if wetReservationDraft}
+          <div class="wet-reservation-grid">
+            <label class="auto-feed-field">
+              <span>{t.wetReservationDate}</span>
+              <input type="date" min={status?.server_time?.slice(0, 10)} bind:value={wetReservationDraft.date} />
+            </label>
+            <label class="auto-feed-field">
+              <span>{t.wetReservationStart}</span>
+              <input type="time" step="60" bind:value={wetReservationDraft.start} />
+            </label>
+            <label class="auto-feed-field">
+              <span>{t.wetReservationEnd}</span>
+              <input type="time" step="60" bind:value={wetReservationDraft.end} />
+            </label>
+          </div>
+          <button class="admin-btn" disabled={savingWetReservation} on:click={onSaveWetReservation}>
+            {t.wetReservationSave}
+          </button>
+        {/if}
+        {#if wetReservationError}<p class="auto-feed-error" role="alert">{wetReservationError}</p>{/if}
+        {#if wetReservations.length}
+          <div class="wet-reservation-list">
+            {#each wetReservations as reservation (reservation.id)}
+              <div class="wet-reservation-item">
+                <span>{reservation.meal_date}　{reservation.starts_at.slice(11, 16)}–{reservation.ends_at.slice(11, 16)}</span>
+                <div>
+                  <button type="button" on:click={() => (wetReservationDraft = { date: reservation.meal_date, start: reservation.starts_at.slice(11, 16), end: reservation.ends_at.slice(11, 16) })}>{t.wetReservationEdit}</button>
+                  <button type="button" on:click={() => onCancelWetReservation(reservation.meal_date)}>{t.wetReservationCancel}</button>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <p class="auto-feed-empty">{t.wetReservationEmpty}</p>
+        {/if}
+      </div>
 
       <div class="history">
         <div class="history-head">
@@ -2170,6 +2307,35 @@
     color: var(--text-dim);
   }
 
+  .wet-reservation-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin: 14px 0;
+  }
+  .wet-reservation-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .wet-reservation-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .wet-reservation-item button {
+    margin-left: 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg-soft);
+    color: var(--text);
+  }
   .auto-feed-windows {
     display: flex;
     flex-direction: column;
@@ -2275,6 +2441,9 @@
   }
 
   @media (max-width: 520px) {
+    .wet-reservation-grid {
+      grid-template-columns: 1fr;
+    }
     .cooldown-picker {
       grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
       gap: 6px;

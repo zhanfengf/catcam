@@ -48,6 +48,34 @@ def init_db(db_path: str) -> None:
                note TEXT
            )"""
     )
+    _conn.execute(
+        """CREATE TABLE IF NOT EXISTS wet_food_reservation (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               meal_date TEXT NOT NULL,
+               starts_at TEXT NOT NULL,
+               ends_at TEXT NOT NULL,
+               status TEXT NOT NULL DEFAULT 'scheduled',
+               reason TEXT,
+               created_at TEXT NOT NULL,
+               updated_at TEXT NOT NULL,
+               notify_pending INTEGER NOT NULL DEFAULT 0
+           )"""
+    )
+    _conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS wet_food_one_active_day "
+        "ON wet_food_reservation(meal_date) WHERE status = 'scheduled'"
+    )
+    _conn.execute(
+        """CREATE TABLE IF NOT EXISTS auto_feed_skip_log (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               meal_date TEXT NOT NULL,
+               window TEXT NOT NULL,
+               reservation_id INTEGER NOT NULL,
+               reason TEXT NOT NULL,
+               created_at TEXT NOT NULL,
+               UNIQUE(meal_date, window, reservation_id)
+           )"""
+    )
     # migrate feed_event tables created before source/note existed
     cols = {r[1] for r in _conn.execute("PRAGMA table_info(feed_event)").fetchall()}
     if "source" not in cols:
@@ -236,6 +264,125 @@ def has_feed_in_window(start: datetime, end: datetime) -> bool:
             (start.isoformat(), end.isoformat()),
         ).fetchone()
     return bool(row and row[0])
+
+
+def _reservation_row(row: tuple | None) -> dict | None:
+    if row is None:
+        return None
+    return dict(zip(
+        ("id", "meal_date", "starts_at", "ends_at", "status", "reason",
+         "created_at", "updated_at", "notify_pending"), row,
+    ))
+
+
+def get_wet_reservation(meal_date: str) -> dict | None:
+    if _conn is None:
+        return None
+    with _lock:
+        row = _db().execute(
+            "SELECT id, meal_date, starts_at, ends_at, status, reason, created_at, "
+            "updated_at, notify_pending FROM wet_food_reservation "
+            "WHERE meal_date = ? AND status = 'scheduled' ORDER BY id DESC LIMIT 1",
+            (meal_date,),
+        ).fetchone()
+    return _reservation_row(row)
+
+
+def get_wet_reservations_for_guard(meal_date: str) -> list[dict]:
+    if _conn is None:
+        return []
+    with _lock:
+        rows = _db().execute(
+            "SELECT id, meal_date, starts_at, ends_at, status, reason, created_at, "
+            "updated_at, notify_pending FROM wet_food_reservation "
+            "WHERE meal_date = ? AND status IN ('scheduled', 'completed', 'expired', 'cancelled_feed')",
+            (meal_date,),
+        ).fetchall()
+    return [_reservation_row(row) for row in rows]
+
+
+def get_due_wet_reservations(at: datetime) -> list[dict]:
+    with _lock:
+        rows = _db().execute(
+            "SELECT id, meal_date, starts_at, ends_at, status, reason, created_at, "
+            "updated_at, notify_pending FROM wet_food_reservation "
+            "WHERE status='scheduled' AND ends_at<=?",
+            (at.isoformat(),),
+        ).fetchall()
+    return [_reservation_row(row) for row in rows]
+
+
+def list_wet_reservations(at: datetime) -> list[dict]:
+    with _lock:
+        rows = _db().execute(
+            "SELECT id, meal_date, starts_at, ends_at, status, reason, created_at, "
+            "updated_at, notify_pending FROM wet_food_reservation "
+            "WHERE status='scheduled' AND ends_at>? ORDER BY starts_at LIMIT 30",
+            (at.isoformat(),),
+        ).fetchall()
+    return [_reservation_row(row) for row in rows]
+
+
+def save_wet_reservation(meal_date: str, starts_at: datetime, ends_at: datetime, at: datetime) -> dict:
+    with _lock:
+        conn = _db()
+        row = conn.execute(
+            "SELECT id FROM wet_food_reservation WHERE meal_date = ? AND status = 'scheduled'",
+            (meal_date,),
+        ).fetchone()
+        if row:
+            conn.execute(
+                "UPDATE wet_food_reservation SET starts_at=?, ends_at=?, updated_at=? WHERE id=?",
+                (starts_at.isoformat(), ends_at.isoformat(), at.isoformat(), row[0]),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO wet_food_reservation "
+                "(meal_date, starts_at, ends_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (meal_date, starts_at.isoformat(), ends_at.isoformat(), at.isoformat(), at.isoformat()),
+            )
+        conn.commit()
+    return get_wet_reservation(meal_date)
+
+
+def transition_wet_reservation(reservation_id: int, status: str, reason: str, at: datetime,
+                               notify: bool = False) -> bool:
+    with _lock:
+        conn = _db()
+        result = conn.execute(
+            "UPDATE wet_food_reservation SET status=?, reason=?, updated_at=?, notify_pending=? "
+            "WHERE id=? AND status='scheduled'",
+            (status, reason, at.isoformat(), int(notify), reservation_id),
+        )
+        conn.commit()
+    return result.rowcount > 0
+
+
+def pending_wet_reservation_notifications() -> list[dict]:
+    with _lock:
+        rows = _db().execute(
+            "SELECT id, meal_date, starts_at, ends_at, status, reason, created_at, "
+            "updated_at, notify_pending FROM wet_food_reservation WHERE notify_pending=1"
+        ).fetchall()
+    return [_reservation_row(row) for row in rows]
+
+
+def clear_wet_reservation_notification(reservation_id: int) -> None:
+    with _lock:
+        conn = _db()
+        conn.execute("UPDATE wet_food_reservation SET notify_pending=0 WHERE id=?", (reservation_id,))
+        conn.commit()
+
+
+def log_auto_feed_skip(meal_date: str, window: str, reservation_id: int, at: datetime) -> None:
+    with _lock:
+        conn = _db()
+        conn.execute(
+            "INSERT OR IGNORE INTO auto_feed_skip_log "
+            "(meal_date, window, reservation_id, reason, created_at) VALUES (?, ?, ?, ?, ?)",
+            (meal_date, window, reservation_id, "因罐頭預約而跳過", at.isoformat()),
+        )
+        conn.commit()
 
 
 def _get_state(key: str, default: str = "") -> str:

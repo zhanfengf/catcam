@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import datetime, time, timedelta
 
-from . import db, ha
+from . import db, ha, wet_reservation
 from .config import get_settings
 from .scheduling import current_cooldown_minutes, now
 
@@ -152,6 +152,14 @@ async def _check_once_locked() -> None:
             continue
         if n.time() < end_t:
             continue  # window hasn't closed yet today
+
+        reservation_id = wet_reservation.guard_auto_window(w, n)
+        if reservation_id is not None:
+            handled[w] = today
+            db.log_auto_feed_skip(today, w, reservation_id, n)
+            changed = True
+            logger.info("autofeed: skipped %s for wet-food reservation %s", w, reservation_id)
+            continue
 
         end_dt = n.replace(hour=end_t.hour, minute=end_t.minute, second=0, microsecond=0)
 

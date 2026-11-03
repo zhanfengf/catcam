@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 
-from . import db, notify
+from . import db, notify, wet_reservation
 from .config import get_settings
 from .scheduling import is_within_window, now
 
@@ -27,6 +27,8 @@ def build_alert_message(last_feed: dict | None, checked_at: datetime) -> str:
             f"🕐 今日 {s.open_time} 開放後仍未有任何餵食紀錄"
         )
     lines.append("🍚 請檢查糧兜、餵食機同 Roll Roll")
+    if wet_reservation.active_at(checked_at):
+        lines.append("🥫 RollRoll等下食罐罐")
     return "\n".join(lines)
 
 

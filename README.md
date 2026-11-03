@@ -59,6 +59,7 @@ go2rtc (WebSocket + MSE)  ──►  Home Assistant WHEP  ──►  📷 PetKit
 | Admin 強制餵食 | `POST /admin/feed` | 繞過限制；成功後重設目前 cooldown |
 | Admin 模擬出糧 | `POST /admin/feed-test` | 繞過限制；不改 cooldown |
 | Admin 餵罐罐 | `POST /admin/wet-food` | 繞過限制；重設目前 cooldown，但不出糧、不錄影 |
+| 預留罐頭餐 | `GET/POST /admin/wet-food-reservation`、`POST /admin/wet-food-reservation/cancel` | Admin 簽署；指定香港日期，一日最多一段 |
 | 設定 Cooldown | `POST /admin/cooldown` | Admin 簽署；設定 120–240 分鐘並立即重新計算倒數 |
 | 設定公告 | `POST /admin/announcement` | Admin 簽署 |
 | 開啟禁食 | `POST /admin/fasting` | Admin 簽署 |
@@ -183,6 +184,28 @@ Admin 面板以手機原生時間選擇器設定每段開始及結束時間，�
 時段的舊 key，不需要在午夜清空整個 Object。日期不同本身已代表新一天尚未處理。
 如果新增時段在今日已經完結，該時段會標記為今日已處理並由明日才正式生效，避免
 儲存後立即追補出糧；仍在進行或尚未開始的新時段則可在今日正常生效。
+
+### 一次性預留罐頭餐（已於 Preview 驗證）
+
+Admin 可選指定香港日期及 15–120 分鐘的同日預留時段；每個日期最多一段，可編輯或取消。開始前會按目前 cooldown（120–240 分鐘）進入餐前禁乾糧期。建立時若最近一次餵食令餐前時間不足，API 會拒絕並提示最早可開始時間。禁糧期及預留時段內，公開 `/feed` 會顯示等候倒數；相撞的 CatCam 自動餵食只跳過當日一次，原因記入 `auto_feed_skip_log`。
+
+預留期間的按鈕在餐前倒數至**罐頭餐開始**；進入預留時段後改為顯示距離**時段結束**的時間。這個畫面倒數與 `next_feed_at` 不同：`next_feed_at` 仍是訪客最早可再次出乾糧的時間。
+
+Admin 按「餵罐罐」可提早完成預約，cooldown 仍由實際餵食時間開始。時段結束仍未記錄餵罐，公開規則恢復且 Telegram 提醒；5 小時無餵食提醒照常發送，並註明正等候罐頭餐。Admin 強制或模擬出糧會取消預約；偵測到 PetKit App／機身／自身排程出糧亦會取消並以 Telegram 通知。若 Admin 加長 cooldown 令現有預約不再滿足餐前空肚時間，儲存 cooldown 後會取消預約。
+
+預約保存在新增的 `wet_food_reservation` 表；預留本身不寫入 `feed_log`、`feed_event`，實際按「餵罐罐」才按原有規則記錄。Preview 使用獨立資料庫及模擬出糧，不連接 Home Assistant 或 Telegram。
+
+#### 預留罐頭餐的 Telegram 訊息
+
+以下是正式版使用的訊息範本；日期與時間會換成該筆預約的實際值。Preview 沒有 Telegram 憑證，不會發送。
+
+| 觸發條件 | 訊息內容 |
+| --- | --- |
+| 預留時段結束，仍未按「餵罐罐」 | `🥫 Roll Roll 預留罐頭餐 2026-11-03 18:30–19:30 已結束，未記錄餵罐。公開餵食已恢復原有規則。` |
+| 餐前禁糧期／預留時段內偵測到 PetKit App、機身按鈕或 PetKit 排程出糧 | `⚠️ 偵測到 PetKit 出糧；2026-11-03 的罐頭餐預約已取消，餐前禁乾糧時間無法保證。` |
+| 連續 5 小時沒有餵食動態，且當時正等候罐頭餐 | 原有 5 小時提醒內容照發，最後加一行 `🥫 RollRoll等下食罐罐` |
+
+儲存／修改預約、Admin 手動取消、Admin 強制或模擬出糧取消預約、按「餵罐罐」完成預約，以及自動餵食因預約跳過，**不會額外發一則預約 Telegram**。系統每約 60 秒檢查逾時預約；Telegram 發送失敗會保留待發狀態，下次檢查重試。
 
 ### 自動餵食的 60 分鐘補餵期限
 

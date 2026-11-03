@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from . import autofeed, buffer, db, feedwatch, ha, highlights, recorder, streamwatch
+from . import autofeed, buffer, db, feedwatch, ha, highlights, recorder, streamwatch, wet_reservation
 from .config import get_settings
 from .logging_utils import install_sensitive_log_filter
 from .ratelimit import check_ip
@@ -33,7 +33,9 @@ async def lifespan(app: FastAPI):
         # Preview only runs the scheduler against its isolated DB. It never
         # starts HA polling, video capture, recovery, highlights or Telegram.
         autofeed.start()
+        wet_reservation.start()
         yield
+        wet_reservation.stop()
         autofeed.stop()
         return
     buffer.start()
@@ -41,11 +43,13 @@ async def lifespan(app: FastAPI):
     highlights.start()
     ha.start()
     autofeed.start()
+    wet_reservation.start()
     feedwatch.start()
     streamwatch.start()
     yield
     streamwatch.stop()
     feedwatch.stop()
+    wet_reservation.stop()
     autofeed.stop()
     ha.stop()
     recorder.stop()
@@ -141,11 +145,13 @@ async def feed(request: Request):
         last = db.get_last_fed_at()
         st = build_status(last)
         if not st["can_feed"]:
-            code = 403 if st["reason"] == "outside_hours" else 429
-            msg = ("而家係休息時間，餵食時段 "
-                   f"{st['window']['open']}–{st['window']['close']}"
-                   if st["reason"] == "outside_hours"
-                   else "啱啱先餵咗，要等下次先得")
+            code = 403 if st["reason"] in ("outside_hours", "wet_food_reserved") else 429
+            if st["reason"] == "outside_hours":
+                msg = f"而家係休息時間，餵食時段 {st['window']['open']}–{st['window']['close']}"
+            elif st["reason"] == "wet_food_reserved":
+                msg = "RollRoll等下食罐罐，暫時唔出乾糧"
+            else:
+                msg = "啱啱先餵咗，要等下次先得"
             return JSONResponse(
                 status_code=code,
                 content={"ok": False, **st, "message": msg},
@@ -230,6 +236,7 @@ async def admin_feed(request: Request):
             # Mark any containing auto-feed window covered before releasing
             # the scheduler lock.
             autofeed.mark_windows_covered(fed_at)
+            reservation_cancelled = wet_reservation.complete_or_cancel_for_feed(fed_at, "admin")
 
     new_status = build_status(db.get_last_fed_at())
     return {
@@ -238,6 +245,7 @@ async def admin_feed(request: Request):
             "強制餵咗喇！公開餵食 "
             f"{new_status['cooldown_minutes']} 分鐘後再開 🔓🐱"
         ),
+        "reservation_cancelled": reservation_cancelled,
         **new_status,
     }
 
@@ -286,11 +294,13 @@ async def admin_feed_test(request: Request):
         # "訪客餵食咗" count the same way, while staying distinguishable in
         # feed_log from a real forced feed via /admin/feed
         db.record_feed(fed_at, f"admin_test:{ip}", s.feed_amount, source="admin_test")
+        reservation_cancelled = wet_reservation.complete_or_cancel_for_feed(fed_at, "admin_test")
         if s.preview_mode:
             db.add_feed_event(fed_at, source="admin_test", note="preview")
 
     new_status = build_status(db.get_last_fed_at())
-    return {"ok": True, "message": "模擬出糧完成，冇影響真實統計！🧪🐱", **new_status}
+    return {"ok": True, "message": "模擬出糧完成，冇影響真實統計！🧪🐱",
+            "reservation_cancelled": reservation_cancelled, **new_status}
 
 
 @app.post("/admin/cooldown")
@@ -338,11 +348,13 @@ async def admin_set_cooldown(request: Request):
     async with _feed_lock:
         async with autofeed.scheduler_lock():
             db.set_cooldown_minutes(value)
+            reservation_cancelled = wet_reservation.cancel_if_cooldown_invalid(now(), value)
             new_status = build_status(db.get_last_fed_at())
 
     return {
         "ok": True,
         "message": f"Cooldown 已更新為 {value} 分鐘",
+        "reservation_cancelled": reservation_cancelled,
         **new_status,
     }
 
@@ -382,6 +394,7 @@ async def admin_wet_food(request: Request):
             )
             db.add_feed_event(fed_at, source="admin_wet_food")
             autofeed.mark_windows_covered(fed_at)
+            wet_reservation.complete_or_cancel_for_feed(fed_at, "admin_wet_food")
 
     new_status = build_status(db.get_last_fed_at())
     return {
@@ -390,6 +403,59 @@ async def admin_wet_food(request: Request):
         "fed_at": fed_at.isoformat(),
         **new_status,
     }
+
+
+@app.get("/admin/wet-food-reservation")
+async def admin_get_wet_food_reservation(request: Request):
+    timestamp = request.headers.get("x-admin-timestamp", "")
+    signature = request.headers.get("x-admin-signature", "")
+    if not verify_admin_signature("GET", "/admin/wet-food-reservation", timestamp, signature):
+        return JSONResponse(status_code=403, content={"ok": False, "reason": "unauthorized"})
+    return {"ok": True, "reservations": db.list_wet_reservations(now())}
+
+
+@app.post("/admin/wet-food-reservation")
+async def admin_save_wet_food_reservation(request: Request):
+    timestamp = request.headers.get("x-admin-timestamp", "")
+    signature = request.headers.get("x-admin-signature", "")
+    if not verify_admin_signature("POST", "/admin/wet-food-reservation", timestamp, signature):
+        return JSONResponse(status_code=403, content={"ok": False, "reason": "unauthorized"})
+    try:
+        body = await request.json()
+        meal_date = str(body.get("date") or "")
+        start = str(body.get("start") or "")
+        end = str(body.get("end") or "")
+        async with _feed_lock:
+            async with autofeed.scheduler_lock():
+                reservation = wet_reservation.save(meal_date, start, end, now())
+    except (ValueError, TypeError) as exc:
+        return JSONResponse(
+            status_code=422,
+            content={"ok": False, "reason": "invalid_wet_food_reservation", "message": str(exc)},
+        )
+    return {"ok": True, "reservation": reservation}
+
+
+@app.post("/admin/wet-food-reservation/cancel")
+async def admin_cancel_wet_food_reservation(request: Request):
+    timestamp = request.headers.get("x-admin-timestamp", "")
+    signature = request.headers.get("x-admin-signature", "")
+    if not verify_admin_signature("POST", "/admin/wet-food-reservation/cancel", timestamp, signature):
+        return JSONResponse(status_code=403, content={"ok": False, "reason": "unauthorized"})
+    try:
+        body = await request.json()
+        meal_date = str(body.get("date") or "")
+    except ValueError:
+        meal_date = ""
+    async with _feed_lock:
+        async with autofeed.scheduler_lock():
+            reservation = db.get_wet_reservation(meal_date)
+            cancelled = bool(reservation and db.transition_wet_reservation(
+                reservation["id"], "cancelled", "admin_cancelled", now()
+            ))
+    if not cancelled:
+        return JSONResponse(status_code=404, content={"ok": False, "reason": "not_found"})
+    return {"ok": True}
 
 
 @app.post("/admin/announcement")

@@ -100,6 +100,29 @@ export async function adminWetFood(token) {
   return { httpOk: r.ok, status: r.status, data };
 }
 
+async function wetReservationRequest(token, method, path, body) {
+  const { timestamp, signature } = await signAdminRequest(token, method, path);
+  const r = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Admin-Timestamp': timestamp,
+      'X-Admin-Signature': signature
+    },
+    ...(body ? { body: JSON.stringify(body) } : {})
+  });
+  let data = {};
+  try { data = await r.json(); } catch (e) { /* Show the HTTP error below. */ }
+  return { httpOk: r.ok, status: r.status, data };
+}
+
+export const adminGetWetReservation = (token) =>
+  wetReservationRequest(token, 'GET', '/admin/wet-food-reservation');
+export const adminSaveWetReservation = (token, date, start, end) =>
+  wetReservationRequest(token, 'POST', '/admin/wet-food-reservation', { date, start, end });
+export const adminCancelWetReservation = (token, date) =>
+  wetReservationRequest(token, 'POST', '/admin/wet-food-reservation/cancel', { date });
+
 export async function adminSetAnnouncement(token, text) {
   const { timestamp, signature } = await signAdminRequest(token, 'POST', '/admin/announcement');
   const r = await fetch(`${API_BASE}/admin/announcement`, {
