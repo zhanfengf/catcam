@@ -2314,7 +2314,9 @@
     margin: 14px 0;
   }
   .wet-reservation-grid .auto-feed-field {
-    max-width: 220px;
+    width: 220px;
+    max-width: 100%;
+    box-sizing: border-box;
   }
   .wet-reservation-list {
     display: grid;
