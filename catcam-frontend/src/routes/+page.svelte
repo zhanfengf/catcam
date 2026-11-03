@@ -1164,7 +1164,7 @@
         <p class="history-note">{t.wetReservationHint}</p>
         {#if wetReservationDraft}
           <div class="wet-reservation-grid">
-            <label class="auto-feed-field">
+            <label class="auto-feed-field wet-reservation-date">
               <span>{t.wetReservationDate}</span>
               <input type="date" min={status?.server_time?.slice(0, 10)} bind:value={wetReservationDraft.date} />
             </label>
@@ -2312,6 +2312,9 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
     margin: 14px 0;
+  }
+  .wet-reservation-date {
+    max-width: 220px;
   }
   .wet-reservation-list {
     display: grid;
